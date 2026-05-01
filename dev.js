@@ -1,21 +1,22 @@
 /**
  * ============================================================================
- *  CENTRAL DE DESENVOLVEDOR — MOTOR LÓGICO (God Mode)
+ *  CENTRAL DE DESENVOLVEDOR — MOTOR LÓGICO (God Mode) v2
  *  Vanilla JS ES6+ | Zero dependências
  *  ----------------------------------------------------------------------------
  *  Arquitetura:
  *    [API] → [State] → [Render Dispatcher] ← [Events]
  *
  *  Estado consumido:
- *    - clientes, logs, eventosAuth, sessoesAtivas
- *    - totais (KPIs de logs)
- *    - operacionais (KPIs comportamentais)
+ *    - clientes, logs, eventosAuth, sessoesAtivas, saudeApps
+ *    - totais (KPIs de logs), operacionais (KPIs comportamentais)
+ *    - ui: search, severity{ERRO,ALERTA,INFO}, theme, capacityOpen
  *
  *  Princípios:
  *    - Single source of truth
  *    - Render idempotente por tab
  *    - Auto-refresh visibility-aware
- *    - DOM seguro (textContent)
+ *    - DOM seguro (textContent / DocumentFragment)
+ *    - Filtros compostos in-memory (zero fetch extra)
  * ============================================================================
  */
 
@@ -31,7 +32,9 @@
 
     LIMIT: 500,
     AUTO_REFRESH_MS: 30000,        // 30s — só quando aba está visível
-    FETCH_TIMEOUT_MS: 20000
+    FETCH_TIMEOUT_MS: 20000,
+    SEARCH_DEBOUNCE_MS: 180,       // search input debounce
+    LS_THEME_KEY: 'godmode.theme'  // chave de persistência do tema
   };
 
   // ==========================================================================
@@ -42,13 +45,26 @@
     logs: [],
     eventosAuth: [],
     sessoesAtivas: [],
+    saudeApps: [],                 // ← NOVO: array de apps monitorados (Capacity)
     totais: null,
     operacionais: null,
     filtroClienteId: '',
-    activeTab: 'logs',         // 'logs' | 'auth' | 'sessions'
+    activeTab: 'logs',             // 'logs' | 'auth' | 'sessions'
     isLoading: false,
     error: null,
-    geradoEm: null
+    geradoEm: null,
+
+    // ─── UI sub-state (só client-side, não vem do backend) ──────────────────
+    ui: {
+      search: '',                  // string normalizada (lowercase, trim)
+      severity: {                  // toggle de gravidade (tab Logs)
+        ERRO:    true,
+        ALERTA:  true,
+        INFO:    true
+      },
+      theme: 'light',              // 'light' | 'dark'
+      capacityOpen: false          // drawer Capacity Monitor aberto?
+    }
   };
 
   // ==========================================================================
@@ -56,7 +72,7 @@
   // ==========================================================================
   const dom = {
     clientList:       document.getElementById('clientList'),
-    logsList:         document.getElementById('logsList'),       // área de eventos (multi-tab)
+    logsList:         document.getElementById('logsList'),
     logsMeta:         document.getElementById('logsMeta'),
     mainTitle:        document.getElementById('mainTitle'),
     mainSubtitle:     document.getElementById('mainSubtitle'),
@@ -89,7 +105,28 @@
       erros:    document.getElementById('kpiErros'),
       alertas:  document.getElementById('kpiAlertas'),
       infos:    document.getElementById('kpiInfos')
-    }
+    },
+
+    // ─── NOVO: Toolbar de eventos (search + pills + export) ────────────────
+    searchInput:      document.getElementById('searchInput'),
+    searchClearBtn:   document.getElementById('searchClearBtn'),
+    severityPills:    document.getElementById('severityPills'),
+    pillCountErro:    document.getElementById('pillCountErro'),
+    pillCountAlerta:  document.getElementById('pillCountAlerta'),
+    pillCountInfo:    document.getElementById('pillCountInfo'),
+    exportCsvBtn:     document.getElementById('exportCsvBtn'),
+
+    // ─── NOVO: Theme toggle ────────────────────────────────────────────────
+    themeToggleBtn:   document.getElementById('themeToggleBtn'),
+
+    // ─── NOVO: Capacity Drawer ─────────────────────────────────────────────
+    capacityBtn:      document.getElementById('capacityBtn'),
+    capacityBadge:    document.getElementById('capacityBadge'),
+    capacityDrawer:   document.getElementById('capacityDrawer'),
+    capacityDrawerSubtitle: document.getElementById('capacityDrawerSubtitle'),
+    capacitySummary:  document.getElementById('capacitySummary'),
+    capacityList:     document.getElementById('capacityList'),
+    capacityMeta:     document.getElementById('capacityMeta')
   };
 
   // Modal de novo cliente
@@ -185,6 +222,7 @@
     state.logs          = Array.isArray(data.logs)          ? data.logs          : [];
     state.eventosAuth   = Array.isArray(data.eventosAuth)   ? data.eventosAuth   : [];
     state.sessoesAtivas = Array.isArray(data.sessoesAtivas) ? data.sessoesAtivas : [];
+    state.saudeApps     = Array.isArray(data.saudeApps)     ? data.saudeApps     : []; // ← NOVO
     state.totais        = data.totais       || null;
     state.operacionais  = data.operacionais || null;
     state.geradoEm      = data.geradoEm     || new Date().toISOString();
@@ -201,27 +239,61 @@
     if (!['logs', 'auth', 'sessions'].includes(tab)) return;
     state.activeTab = tab;
     renderTabs();
+    renderToolbarVisibility();
     renderEventsList();
+    renderHeader();              // atualiza meta de contagem
+  }
+
+  // Mutações de UI ────────────────────────────────────────────────────────
+  function setSearch(query) {
+    const norm = String(query || '').toLowerCase().trim();
+    if (norm === state.ui.search) return;
+    state.ui.search = norm;
+    renderSearchClearVisibility();
+    renderEventsList();
+    renderHeader();
+  }
+
+  function toggleSeverity(sev) {
+    if (!(sev in state.ui.severity)) return;
+    state.ui.severity[sev] = !state.ui.severity[sev];
+    renderSeverityPills();
+    renderEventsList();
+    renderHeader();
+  }
+
+  function setTheme(theme) {
+    const next = theme === 'dark' ? 'dark' : 'light';
+    if (state.ui.theme === next) return;
+    state.ui.theme = next;
+    applyTheme(next, /* withTransition */ true);
+    try { localStorage.setItem(CONFIG.LS_THEME_KEY, next); } catch (_) {}
+  }
+
+  function setCapacityOpen(open) {
+    state.ui.capacityOpen = !!open;
+    renderCapacityDrawer();
   }
 
   // ==========================================================================
   // 6. SELETORES DERIVADOS
   // ==========================================================================
-  function getLogsFiltrados() {
+  function getLogsFiltradosCliente() {
     if (!state.filtroClienteId) return state.logs;
     return state.logs.filter(l => String(l.idCliente) === String(state.filtroClienteId));
   }
 
-  function getAuthFiltrados() {
+  function getAuthFiltradosCliente() {
     if (!state.filtroClienteId) return state.eventosAuth;
     return state.eventosAuth.filter(a => String(a.idCliente) === String(state.filtroClienteId));
   }
 
-  function getSessoesFiltradas() {
+  function getSessoesFiltradasCliente() {
     if (!state.filtroClienteId) return state.sessoesAtivas;
     return state.sessoesAtivas.filter(s => String(s.idCliente) === String(state.filtroClienteId));
   }
 
+  // KPIs SEMPRE consideram apenas o filtro de cliente (não search/severity)
   function calcularKPIsLogs(logs) {
     const r = { total: logs.length, erros: 0, alertas: 0, infos: 0 };
     for (const l of logs) {
@@ -246,6 +318,92 @@
     if (!id) return 'Todos os Clientes';
     const c = state.clientes.find(c => String(c.idCliente) === String(id));
     return c ? c.nomeCliente : id;
+  }
+
+  // ─── Pipeline de filtro composto ────────────────────────────────────────
+  // Ordem: cliente → severidade (só logs) → search (todos)
+  function applySeverityFilter(logs) {
+    const sev = state.ui.severity;
+    if (sev.ERRO && sev.ALERTA && sev.INFO) return logs; // tudo ligado: passthrough
+    return logs.filter(l => {
+      const t = String(l.tipoLog || '').toUpperCase();
+      if (t === 'ERRO')   return sev.ERRO;
+      if (t === 'ALERTA') return sev.ALERTA;
+      if (t === 'INFO')   return sev.INFO;
+      return true; // tipo desconhecido sempre passa
+    });
+  }
+
+  function applySearchFilter(items, kind) {
+    const q = state.ui.search;
+    if (!q) return items;
+    if (kind === 'logs') {
+      return items.filter(l =>
+        contains(l.aplicativo, q) ||
+        contains(l.usuario, q) ||
+        contains(l.dispositivo, q) ||
+        contains(l.mensagemErro, q) ||
+        contains(l.tipoLog, q) ||
+        contains(getNomeCliente(l.idCliente), q)
+      );
+    }
+    if (kind === 'auth') {
+      return items.filter(a =>
+        contains(a.aplicativo, q) ||
+        contains(a.usuario, q) ||
+        contains(a.dispositivo, q) ||
+        contains(a.tipoEvento, q) ||
+        contains(a.detalhes, q) ||
+        contains(getNomeCliente(a.idCliente), q)
+      );
+    }
+    // sessions
+    return items.filter(s =>
+      contains(s.aplicativo, q) ||
+      contains(s.usuario, q) ||
+      contains(s.dispositivo, q) ||
+      contains(getNomeCliente(s.idCliente), q)
+    );
+  }
+
+  function contains(field, q) {
+    if (field === null || field === undefined) return false;
+    return String(field).toLowerCase().includes(q);
+  }
+
+  // Resultado final que vai pra UI (lista renderizada)
+  function getEventsForActiveTab() {
+    if (state.activeTab === 'auth') {
+      return applySearchFilter(getAuthFiltradosCliente(), 'auth');
+    }
+    if (state.activeTab === 'sessions') {
+      return applySearchFilter(getSessoesFiltradasCliente(), 'sessions');
+    }
+    // logs: pipeline completo
+    const c = getLogsFiltradosCliente();
+    const s = applySeverityFilter(c);
+    return applySearchFilter(s, 'logs');
+  }
+
+  // Capacity helpers
+  const CAP_STATUS_ORDER = ['CRITICO', 'ALERTA', 'ATENCAO', 'OFFLINE', 'PENDING', 'SAUDAVEL', 'MIGRADO'];
+  function contarSaudePorStatus() {
+    const map = { SAUDAVEL: 0, ATENCAO: 0, ALERTA: 0, CRITICO: 0, OFFLINE: 0, MIGRADO: 0, PENDING: 0 };
+    for (const a of state.saudeApps) {
+      const st = String(a.status || 'PENDING').toUpperCase();
+      if (st in map) map[st]++;
+      else map.PENDING++;
+    }
+    return map;
+  }
+  function contarSaudeAlertas() {
+    // o que "merece" o badge no botão da topbar
+    let n = 0;
+    for (const a of state.saudeApps) {
+      const st = String(a.status || '').toUpperCase();
+      if (st === 'CRITICO' || st === 'ALERTA' || st === 'OFFLINE') n++;
+    }
+    return n;
   }
 
   // ==========================================================================
@@ -313,7 +471,12 @@
     renderLiveStrip();
     renderKPIsLogs();
     renderTabs();
+    renderToolbarVisibility();
+    renderSeverityPills();
+    renderSearchClearVisibility();
     renderEventsList();
+    renderCapacityBadge();
+    if (state.ui.capacityOpen) renderCapacityDrawer(); // re-render quando dados mudam
   }
 
   function renderHeader() {
@@ -327,7 +490,17 @@
 
     const ts = state.geradoEm ? `· atualizado ${formatRelativeTime(state.geradoEm)}` : '';
     const total = getEventsForActiveTab().length;
-    dom.logsMeta.textContent = `${formatNumber(total)} evento(s) ${ts}`;
+    const filtroAtivo = isAnyExtraFilterActive() ? ' (filtrados)' : '';
+    dom.logsMeta.textContent = `${formatNumber(total)} evento(s)${filtroAtivo} ${ts}`;
+  }
+
+  function isAnyExtraFilterActive() {
+    if (state.ui.search) return true;
+    if (state.activeTab === 'logs') {
+      const s = state.ui.severity;
+      if (!(s.ERRO && s.ALERTA && s.INFO)) return true;
+    }
+    return false;
   }
 
   // KPIs operacionais (sempre globais — não respeitam filtro de cliente)
@@ -339,9 +512,9 @@
     dom.kpiOps.expiradas.textContent = formatNumber(ops.sessoesExpiradasHoje);
   }
 
-  // KPIs de logs (respeitam filtro de cliente)
+  // KPIs de logs (respeitam apenas filtro de cliente, NÃO search/severity)
   function renderKPIsLogs() {
-    const kpis = calcularKPIsLogs(getLogsFiltrados());
+    const kpis = calcularKPIsLogs(getLogsFiltradosCliente());
     dom.kpi.total.textContent   = formatNumber(kpis.total);
     dom.kpi.erros.textContent   = formatNumber(kpis.erros);
     dom.kpi.alertas.textContent = formatNumber(kpis.alertas);
@@ -355,7 +528,6 @@
     const list = dom.liveStripList;
     list.textContent = '';
 
-    // Live Strip é sempre global — independente do filtro de cliente
     const sessoes = state.sessoesAtivas;
 
     if (!sessoes.length) {
@@ -408,19 +580,19 @@
   }
 
   // ==========================================================================
-  // 10. RENDER LAYER — Tabs
+  // 10. RENDER LAYER — Tabs + Toolbar
   // ==========================================================================
   function renderTabs() {
+    // Counts da tab refletem APENAS o filtro de cliente (consistência visual)
     const counts = {
-      logs:     getLogsFiltrados().length,
-      auth:     getAuthFiltrados().length,
-      sessions: getSessoesFiltradas().length
+      logs:     getLogsFiltradosCliente().length,
+      auth:     getAuthFiltradosCliente().length,
+      sessions: getSessoesFiltradasCliente().length
     };
     dom.tabCounts.logs.textContent     = formatNumber(counts.logs);
     dom.tabCounts.auth.textContent     = formatNumber(counts.auth);
     dom.tabCounts.sessions.textContent = formatNumber(counts.sessions);
 
-    // Estado ativo visual
     const buttons = dom.eventTabs.querySelectorAll('.tab');
     buttons.forEach(btn => {
       const isActive = btn.dataset.tab === state.activeTab;
@@ -429,10 +601,46 @@
     });
   }
 
-  function getEventsForActiveTab() {
-    if (state.activeTab === 'auth')     return getAuthFiltrados();
-    if (state.activeTab === 'sessions') return getSessoesFiltradas();
-    return getLogsFiltrados();
+  // Mostra/esconde os pills de severidade (só fazem sentido na tab Logs)
+  function renderToolbarVisibility() {
+    if (!dom.severityPills) return;
+    const showPills = state.activeTab === 'logs';
+    dom.severityPills.hidden = !showPills;
+    if (dom.searchInput) {
+      const placeholders = {
+        logs:     'Buscar em mensagens, apps, usuários…',
+        auth:     'Buscar em eventos, usuários, apps…',
+        sessions: 'Buscar em sessões, usuários, dispositivos…'
+      };
+      dom.searchInput.placeholder = placeholders[state.activeTab] || 'Buscar…';
+    }
+  }
+
+  function renderSeverityPills() {
+    if (!dom.severityPills) return;
+    // counts respeitam o filtro de cliente atual
+    const logs = getLogsFiltradosCliente();
+    const counts = { ERRO: 0, ALERTA: 0, INFO: 0 };
+    for (const l of logs) {
+      const t = String(l.tipoLog || '').toUpperCase();
+      if (t in counts) counts[t]++;
+    }
+    if (dom.pillCountErro)    dom.pillCountErro.textContent    = formatNumber(counts.ERRO);
+    if (dom.pillCountAlerta)  dom.pillCountAlerta.textContent  = formatNumber(counts.ALERTA);
+    if (dom.pillCountInfo)    dom.pillCountInfo.textContent    = formatNumber(counts.INFO);
+
+    const pills = dom.severityPills.querySelectorAll('.pill[data-severity]');
+    pills.forEach(p => {
+      const sev = p.dataset.severity;
+      const active = !!state.ui.severity[sev];
+      p.classList.toggle('is-active', active);
+      p.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }
+
+  function renderSearchClearVisibility() {
+    if (!dom.searchClearBtn) return;
+    dom.searchClearBtn.hidden = !state.ui.search;
   }
 
   // ==========================================================================
@@ -478,8 +686,26 @@
   function buildEmptyStateForTab() {
     const filtrando = !!state.filtroClienteId;
     const cliente = getNomeCliente(state.filtroClienteId);
+    const buscando = !!state.ui.search;
+
+    if (buscando) {
+      return buildEmptyState({
+        icon: '⌕',
+        title: 'Nada encontrado',
+        text: `Nenhum resultado para "${state.ui.search}". Limpe a busca ou tente outros termos.`
+      });
+    }
 
     if (state.activeTab === 'logs') {
+      const s = state.ui.severity;
+      const todasOff = !s.ERRO && !s.ALERTA && !s.INFO;
+      if (todasOff) {
+        return buildEmptyState({
+          icon: '◌',
+          title: 'Filtros desligados',
+          text: 'Ative ao menos uma severidade (Erro, Alerta ou Info) para ver logs.'
+        });
+      }
       return buildEmptyState({
         icon: '✓',
         title: 'Nenhum log registrado',
@@ -765,10 +991,373 @@
   }
 
   // ==========================================================================
-  // 14. EVENTS
+  // 14. THEME TOGGLE — Light/Dark via [data-theme] + localStorage
+  // ==========================================================================
+  function detectInitialTheme() {
+    // Prioridade: localStorage → atributo HTML atual → preferência do SO → light
+    try {
+      const stored = localStorage.getItem(CONFIG.LS_THEME_KEY);
+      if (stored === 'light' || stored === 'dark') return stored;
+    } catch (_) {}
+    const attr = document.documentElement.getAttribute('data-theme');
+    if (attr === 'light' || attr === 'dark') return attr;
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return 'dark';
+    }
+    return 'light';
+  }
+
+  function applyTheme(theme, withTransition) {
+    const root = document.documentElement;
+    if (withTransition) {
+      root.classList.add('theme-transitioning');
+      setTimeout(() => root.classList.remove('theme-transitioning'), 500);
+    }
+    root.setAttribute('data-theme', theme);
+    if (dom.themeToggleBtn) {
+      dom.themeToggleBtn.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
+      dom.themeToggleBtn.setAttribute('aria-label',
+        theme === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro');
+      dom.themeToggleBtn.title = theme === 'dark' ? 'Tema escuro ativo' : 'Tema claro ativo';
+    }
+  }
+
+  // ==========================================================================
+  // 15. EXPORT CSV — Dados filtrados → Blob download (RFC 4180)
+  // ==========================================================================
+  const CSV_HEADERS = {
+    logs:     ['timestamp', 'tipoLog', 'idCliente', 'cliente', 'aplicativo', 'usuario', 'dispositivo', 'mensagemErro'],
+    auth:     ['timestamp', 'tipoEvento', 'idCliente', 'cliente', 'aplicativo', 'usuario', 'dispositivo', 'detalhes'],
+    sessions: ['inicioSessao', 'ultimoPing', 'idCliente', 'cliente', 'aplicativo', 'usuario', 'dispositivo']
+  };
+
+  function exportCurrentTabAsCSV() {
+    const tab = state.activeTab;
+    const items = getEventsForActiveTab();
+    if (!items.length) {
+      flashExportButton('Nada para exportar');
+      return;
+    }
+    const headers = CSV_HEADERS[tab];
+    const lines = [headers.join(',')];
+
+    for (const item of items) {
+      const enriched = { ...item, cliente: getNomeCliente(item.idCliente) };
+      const row = headers.map(h => csvEscape(enriched[h]));
+      lines.push(row.join(','));
+    }
+
+    // BOM UTF-8 para Excel reconhecer acentos
+    const csv = '\uFEFF' + lines.join('\r\n') + '\r\n';
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+
+    const filename = buildCsvFilename(tab);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 0);
+
+    flashExportButton(`✓ ${items.length} linha(s)`);
+  }
+
+  function csvEscape(value) {
+    if (value === null || value === undefined) return '';
+    const s = String(value);
+    // RFC 4180: campos com vírgula, aspas ou quebra de linha precisam de aspas duplas
+    if (/[",\r\n]/.test(s)) {
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  }
+
+  function buildCsvFilename(tab) {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+    const cli = state.filtroClienteId ? `_${slugify(getNomeCliente(state.filtroClienteId))}` : '_todos';
+    return `godmode_${tab}${cli}_${stamp}.csv`;
+  }
+
+  function slugify(s) {
+    return String(s || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  }
+
+  function flashExportButton(msg) {
+    if (!dom.exportCsvBtn) return;
+    const span = dom.exportCsvBtn.querySelector('span');
+    if (!span) return;
+    const original = span.textContent;
+    span.textContent = msg;
+    dom.exportCsvBtn.disabled = true;
+    setTimeout(() => {
+      span.textContent = original;
+      dom.exportCsvBtn.disabled = false;
+    }, 1400);
+  }
+
+  // ==========================================================================
+  // 16. CAPACITY DRAWER — Visualização de saudeApps[]
+  // ==========================================================================
+  function openCapacityDrawer()  { setCapacityOpen(true); }
+  function closeCapacityDrawer() { setCapacityOpen(false); }
+
+  function renderCapacityBadge() {
+    if (!dom.capacityBadge) return;
+    const n = contarSaudeAlertas();
+    if (n <= 0) {
+      dom.capacityBadge.hidden = true;
+      dom.capacityBadge.textContent = '0';
+    } else {
+      dom.capacityBadge.hidden = false;
+      dom.capacityBadge.textContent = n > 99 ? '99+' : String(n);
+    }
+  }
+
+  function renderCapacityDrawer() {
+    if (!dom.capacityDrawer) return;
+
+    if (!state.ui.capacityOpen) {
+      dom.capacityDrawer.hidden = true;
+      dom.capacityDrawer.setAttribute('aria-hidden', 'true');
+      return;
+    }
+
+    dom.capacityDrawer.hidden = false;
+    dom.capacityDrawer.setAttribute('aria-hidden', 'false');
+
+    // Subtitle
+    if (dom.capacityDrawerSubtitle) {
+      const total = state.saudeApps.length;
+      dom.capacityDrawerSubtitle.textContent = total
+        ? `Saúde e saturação de ${total} app(s) monitorado(s)`
+        : 'Saúde e saturação dos apps monitorados';
+    }
+
+    renderCapacitySummary();
+    renderCapacityList();
+    renderCapacityFooter();
+  }
+
+  function renderCapacitySummary() {
+    const wrap = dom.capacitySummary;
+    if (!wrap) return;
+    wrap.textContent = '';
+    const counts = contarSaudePorStatus();
+
+    const order = ['CRITICO', 'ALERTA', 'ATENCAO', 'OFFLINE', 'PENDING', 'SAUDAVEL', 'MIGRADO'];
+    const labels = {
+      SAUDAVEL: 'Saudáveis', ATENCAO: 'Atenção', ALERTA: 'Alerta',
+      CRITICO: 'Crítico', OFFLINE: 'Offline', MIGRADO: 'Migrado', PENDING: 'Pendente'
+    };
+
+    const frag = document.createDocumentFragment();
+    let totalChips = 0;
+    for (const st of order) {
+      const n = counts[st] || 0;
+      if (!n) continue;
+      totalChips++;
+      const chip = document.createElement('span');
+      chip.className = `cap-chip cap-chip--${st.toLowerCase()}`;
+      const dot = document.createElement('span');
+      dot.className = 'cap-chip__dot';
+      dot.setAttribute('aria-hidden', 'true');
+      const label = document.createElement('span');
+      label.textContent = labels[st] || st;
+      const count = document.createElement('span');
+      count.className = 'cap-chip__count';
+      count.textContent = formatNumber(n);
+      chip.appendChild(dot);
+      chip.appendChild(label);
+      chip.appendChild(count);
+      frag.appendChild(chip);
+    }
+    if (totalChips) wrap.appendChild(frag);
+  }
+
+  function renderCapacityList() {
+    const wrap = dom.capacityList;
+    if (!wrap) return;
+    wrap.textContent = '';
+
+    if (!state.saudeApps.length) {
+      wrap.appendChild(buildEmptyState({
+        icon: '∅',
+        title: 'Nenhum app monitorado',
+        text: 'Aguardando primeira coleta da Central de Capacity.'
+      }));
+      return;
+    }
+
+    // Ordena: piores status primeiro, depois maior % de uso
+    const sorted = [...state.saudeApps].sort((a, b) => {
+      const sa = CAP_STATUS_ORDER.indexOf(String(a.status || 'PENDING').toUpperCase());
+      const sb = CAP_STATUS_ORDER.indexOf(String(b.status || 'PENDING').toUpperCase());
+      if (sa !== sb) return sa - sb;
+      const pa = Number(a?.capacidade?.percentualUso) || 0;
+      const pb = Number(b?.capacidade?.percentualUso) || 0;
+      return pb - pa;
+    });
+
+    const frag = document.createDocumentFragment();
+    for (const app of sorted) frag.appendChild(buildCapacityCard(app));
+    wrap.appendChild(frag);
+  }
+
+  function renderCapacityFooter() {
+    if (!dom.capacityMeta) return;
+    const ts = state.geradoEm ? formatRelativeTime(state.geradoEm) : '—';
+    const total = state.saudeApps.length;
+    if (!total) {
+      dom.capacityMeta.textContent = `Sem dados · atualizado ${ts}`;
+      return;
+    }
+    const alertas = contarSaudeAlertas();
+    dom.capacityMeta.textContent =
+      `${formatNumber(total)} app(s) · ${formatNumber(alertas)} requer(em) atenção · atualizado ${ts}`;
+  }
+
+  function buildCapacityCard(app) {
+    const status = String(app.status || 'PENDING').toUpperCase();
+    const cap = app.capacidade || {};
+    const pct = clampPct(Number(cap.percentualUso));
+    const dias = Number(cap.diasRestantes);
+
+    const card = document.createElement('article');
+    card.className = 'cap-card';
+    card.dataset.status = status;
+    card.setAttribute('role', 'listitem');
+
+    // Head
+    const head = document.createElement('div');
+    head.className = 'cap-card__head';
+    const heading = document.createElement('div');
+    const title = document.createElement('h3');
+    title.className = 'cap-card__title';
+    title.textContent = app.nomeApp || app.idApp || '(sem nome)';
+    const sub = document.createElement('p');
+    sub.className = 'cap-card__sub';
+    const tipoStorage = app.tipoStorage ? ` · ${app.tipoStorage}` : '';
+    sub.textContent = `${getNomeCliente(app.idCliente)}${tipoStorage}`;
+    heading.appendChild(title);
+    heading.appendChild(sub);
+    const tag = document.createElement('span');
+    tag.className = 'cap-card__status';
+    tag.textContent = capStatusLabel(status);
+    head.appendChild(heading);
+    head.appendChild(tag);
+    card.appendChild(head);
+
+    // Smart progress bar (só faz sentido se há capacidade reportada)
+    if (Number.isFinite(pct)) {
+      const bar = document.createElement('div');
+      bar.className = 'cap-bar';
+      bar.setAttribute('role', 'progressbar');
+      bar.setAttribute('aria-valuemin', '0');
+      bar.setAttribute('aria-valuemax', '100');
+      bar.setAttribute('aria-valuenow', String(pct.toFixed(1)));
+      bar.title = `${pct.toFixed(1)}% utilizado`;
+      const fill = document.createElement('div');
+      fill.className = 'cap-bar__fill';
+      fill.style.setProperty('--cap-fill', `${pct}%`);
+      fill.style.setProperty('--cap-fill-num', String(Math.max(pct / 100, 0.01)));
+      bar.appendChild(fill);
+      card.appendChild(bar);
+    }
+
+    // Métricas
+    const metrics = document.createElement('div');
+    metrics.className = 'cap-card__metrics';
+
+    if (Number.isFinite(pct)) {
+      metrics.appendChild(buildCapMetric('Uso', `${pct.toFixed(1)}%`, pctColorClass(pct)));
+    }
+    if (Number.isFinite(Number(cap.totalCelulas)) && Number.isFinite(Number(cap.limiteCelulas))) {
+      metrics.appendChild(buildCapMetric('Células',
+        `${formatNumber(cap.totalCelulas)} / ${formatNumber(cap.limiteCelulas)}`));
+    }
+    if (Number.isFinite(Number(cap.totalLinhas))) {
+      metrics.appendChild(buildCapMetric('Linhas', formatNumber(cap.totalLinhas)));
+    }
+    if (Number.isFinite(Number(cap.crescimentoDiarioCelulas))) {
+      metrics.appendChild(buildCapMetric('Crescimento/dia',
+        `${formatNumber(Math.round(cap.crescimentoDiarioCelulas))} cel.`));
+    }
+    if (Number.isFinite(dias)) {
+      const cls = dias < 30 ? 'danger' : dias < 90 ? 'warning' : 'success';
+      const txt = dias < 0 ? 'estourado' : `${formatNumber(Math.round(dias))} dias`;
+      metrics.appendChild(buildCapMetric('Tempo restante', txt, cls));
+    }
+
+    if (metrics.children.length) card.appendChild(metrics);
+
+    // Nota explicativa quando não há capacity reportada
+    if (!Number.isFinite(pct) && status === 'PENDING') {
+      const note = document.createElement('p');
+      note.className = 'cap-card__note';
+      note.textContent = 'Aguardando primeiro healthCheck do app.';
+      card.appendChild(note);
+    } else if (status === 'OFFLINE') {
+      const note = document.createElement('p');
+      note.className = 'cap-card__note';
+      note.textContent = 'App não respondeu ao último healthCheck.';
+      card.appendChild(note);
+    } else if (status === 'MIGRADO') {
+      const note = document.createElement('p');
+      note.className = 'cap-card__note';
+      note.textContent = 'Storage migrado — monitoramento histórico congelado.';
+      card.appendChild(note);
+    }
+
+    return card;
+  }
+
+  function buildCapMetric(label, value, modifier) {
+    const wrap = document.createElement('div');
+    wrap.className = 'cap-metric';
+    const l = document.createElement('span');
+    l.className = 'cap-metric__label';
+    l.textContent = label;
+    const v = document.createElement('span');
+    v.className = 'cap-metric__value' + (modifier ? ` cap-metric__value--${modifier}` : '');
+    v.textContent = value;
+    wrap.appendChild(l);
+    wrap.appendChild(v);
+    return wrap;
+  }
+
+  function clampPct(n) {
+    if (!Number.isFinite(n)) return NaN;
+    return Math.max(0, Math.min(100, n));
+  }
+
+  function pctColorClass(pct) {
+    if (pct >= 85) return 'danger';
+    if (pct >= 65) return 'warning';
+    return 'success';
+  }
+
+  function capStatusLabel(status) {
+    const map = {
+      SAUDAVEL: 'Saudável', ATENCAO: 'Atenção', ALERTA: 'Alerta',
+      CRITICO: 'Crítico',   OFFLINE: 'Offline', MIGRADO: 'Migrado', PENDING: 'Pendente'
+    };
+    return map[status] || status;
+  }
+
+  // ==========================================================================
+  // 17. EVENTS
   // ==========================================================================
   function bindEvents() {
-    // Filtro de cliente
+    // ─── Filtro de cliente (sidebar) ──────────────────────────────────────
     dom.clientList.addEventListener('click', (ev) => {
       const btn = ev.target.closest('.client-item');
       if (!btn) return;
@@ -776,7 +1365,6 @@
       setFilter(id);
     });
 
-    // Setas para navegar a sidebar
     dom.clientList.addEventListener('keydown', (ev) => {
       if (!['ArrowDown', 'ArrowUp'].includes(ev.key)) return;
       const items = Array.from(dom.clientList.querySelectorAll('.client-item'));
@@ -787,18 +1375,68 @@
       if (next) next.focus();
     });
 
-    // Tabs
+    // ─── Tabs ─────────────────────────────────────────────────────────────
     dom.eventTabs.addEventListener('click', (ev) => {
       const btn = ev.target.closest('.tab');
       if (!btn) return;
       setActiveTab(btn.dataset.tab);
     });
 
-    // Refresh
+    // ─── Refresh ──────────────────────────────────────────────────────────
     dom.refreshBtn.addEventListener('click', loadData);
 
-    // Atalhos globais
+    // ─── Search (debounced) ───────────────────────────────────────────────
+    if (dom.searchInput) {
+      const debounced = debounce((val) => setSearch(val), CONFIG.SEARCH_DEBOUNCE_MS);
+      dom.searchInput.addEventListener('input', (ev) => debounced(ev.target.value));
+      dom.searchInput.addEventListener('search', (ev) => setSearch(ev.target.value)); // X nativo do input[type=search]
+    }
+    if (dom.searchClearBtn) {
+      dom.searchClearBtn.addEventListener('click', () => {
+        if (dom.searchInput) dom.searchInput.value = '';
+        setSearch('');
+        if (dom.searchInput) dom.searchInput.focus();
+      });
+    }
+
+    // ─── Severity Pills ───────────────────────────────────────────────────
+    if (dom.severityPills) {
+      dom.severityPills.addEventListener('click', (ev) => {
+        const pill = ev.target.closest('.pill[data-severity]');
+        if (!pill) return;
+        toggleSeverity(pill.dataset.severity);
+      });
+    }
+
+    // ─── Export CSV ───────────────────────────────────────────────────────
+    if (dom.exportCsvBtn) {
+      dom.exportCsvBtn.addEventListener('click', exportCurrentTabAsCSV);
+    }
+
+    // ─── Theme toggle ─────────────────────────────────────────────────────
+    if (dom.themeToggleBtn) {
+      dom.themeToggleBtn.addEventListener('click', () => {
+        setTheme(state.ui.theme === 'dark' ? 'light' : 'dark');
+      });
+    }
+
+    // ─── Capacity Drawer ──────────────────────────────────────────────────
+    if (dom.capacityBtn) {
+      dom.capacityBtn.addEventListener('click', openCapacityDrawer);
+    }
+    if (dom.capacityDrawer) {
+      dom.capacityDrawer.addEventListener('click', (ev) => {
+        if (ev.target.closest('[data-close]')) closeCapacityDrawer();
+      });
+    }
+
+    // ─── Atalhos globais ──────────────────────────────────────────────────
     document.addEventListener('keydown', (ev) => {
+      // ESC fecha drawer (precedência sobre outros handlers)
+      if (ev.key === 'Escape' && state.ui.capacityOpen) {
+        closeCapacityDrawer();
+        return;
+      }
       const isInput = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
       if (isInput || ev.metaKey || ev.ctrlKey) return;
       const k = ev.key.toLowerCase();
@@ -806,6 +1444,18 @@
       else if (k === '1') setActiveTab('logs');
       else if (k === '2') setActiveTab('auth');
       else if (k === '3') setActiveTab('sessions');
+      else if (k === '/') {
+        // foca a busca como em apps modernos
+        if (dom.searchInput) {
+          ev.preventDefault();
+          dom.searchInput.focus();
+          dom.searchInput.select();
+        }
+      } else if (k === 't') {
+        setTheme(state.ui.theme === 'dark' ? 'light' : 'dark');
+      } else if (k === 'c') {
+        state.ui.capacityOpen ? closeCapacityDrawer() : openCapacityDrawer();
+      }
     });
 
     // Auto-refresh visibility-aware
@@ -813,7 +1463,7 @@
   }
 
   // ==========================================================================
-  // 15. CLIENT MODAL
+  // 18. CLIENT MODAL
   // ==========================================================================
   function openClientModal() {
     if (!modal.root) return;
@@ -907,8 +1557,16 @@
   }
 
   // ==========================================================================
-  // 16. UTILITIES
+  // 19. UTILITIES
   // ==========================================================================
+  function debounce(fn, ms) {
+    let t = null;
+    return function (...args) {
+      clearTimeout(t);
+      t = setTimeout(() => fn.apply(this, args), ms);
+    };
+  }
+
   function formatNumber(n) {
     if (n === null || n === undefined || isNaN(n)) return '—';
     return new Intl.NumberFormat('pt-BR').format(n);
@@ -963,10 +1621,6 @@
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }
 
-  /**
-   * Gera um gradient determinístico a partir do nome do usuário.
-   * Mesmo nome = mesma cor sempre. Padrão GitHub.
-   */
   function avatarGradient(nome) {
     const palette = [
       ['#2C5BA0', '#6E8DBF'],
@@ -985,7 +1639,7 @@
   }
 
   // ==========================================================================
-  // 17. AUTO-REFRESH (visibility-aware)
+  // 20. AUTO-REFRESH (visibility-aware)
   // ==========================================================================
   let autoRefreshTimer = null;
 
@@ -993,7 +1647,6 @@
     if (CONFIG.AUTO_REFRESH_MS <= 0) return;
     if (autoRefreshTimer) return;
     autoRefreshTimer = setInterval(() => {
-      // Não dispara se modal aberto ou já está carregando
       if (state.isLoading) return;
       if (modal.root && !modal.root.hidden) return;
       loadData();
@@ -1009,7 +1662,6 @@
 
   function handleVisibilityChange() {
     if (document.visibilityState === 'visible') {
-      // Quando volta pra aba, refaz fetch imediato + retoma timer
       loadData();
       startAutoRefresh();
     } else {
@@ -1017,20 +1669,18 @@
     }
   }
 
-  // Tick local: atualiza durações ("há 12 min") sem refazer fetch.
-  // Chama renderLiveStrip e renderEventsList a cada 30s.
   function startLocalTick() {
     setInterval(() => {
       if (state.isLoading) return;
-      // Re-render apenas dos blocos com tempo relativo
       renderHeader();
       renderLiveStrip();
       renderEventsList();
+      if (state.ui.capacityOpen) renderCapacityFooter();
     }, 30000);
   }
 
   // ==========================================================================
-  // 18. ORCHESTRATION
+  // 21. ORCHESTRATION
   // ==========================================================================
   async function loadData() {
     if (state.isLoading) return;
@@ -1039,7 +1689,6 @@
     try {
       const data = await fetchDashboardData();
       setData(data);
-      // Se o cliente filtrado deixou de existir, volta para "todos"
       if (state.filtroClienteId &&
           !state.clientes.some(c => String(c.idCliente) === String(state.filtroClienteId))) {
         state.filtroClienteId = '';
@@ -1062,6 +1711,10 @@
       renderMain();
       return;
     }
+
+    // Tema: aplicar antes de tudo (sem transição na carga inicial = anti-FOUC)
+    state.ui.theme = detectInitialTheme();
+    applyTheme(state.ui.theme, /* withTransition */ false);
 
     bindEvents();
     bindClientModalEvents();
