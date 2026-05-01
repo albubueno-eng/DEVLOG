@@ -308,6 +308,70 @@
     </div>
   </aside>
 
+  <!-- ============================ DRAWER: DETALHE DO EVENTO (LOG/AUTH/SESSION) ============================ -->
+  <aside class="drawer drawer--detail" id="detailDrawer" hidden aria-hidden="true"
+         role="dialog" aria-modal="true" aria-labelledby="detailDrawerTitle">
+    <div class="drawer__backdrop" data-close></div>
+
+    <div class="drawer__panel" role="document">
+      <header class="drawer__header">
+        <div class="drawer__heading">
+          <h2 class="drawer__title" id="detailDrawerTitle">Detalhes do evento</h2>
+          <p class="drawer__subtitle" id="detailDrawerSubtitle">—</p>
+        </div>
+        <button class="drawer__close" type="button" data-close aria-label="Fechar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </header>
+
+      <!-- Bloco principal: dados estruturados do evento -->
+      <section class="drawer__body" id="detailBody" aria-label="Dados do evento">
+        <!-- Cabeçalho do evento (severidade, timestamp, cliente, app, usuário, dispositivo) -->
+        <div class="detail-meta" id="detailMeta">
+          <!-- linhas key/value injetadas via JS -->
+        </div>
+
+        <!-- Mensagem completa (sem truncamento) -->
+        <div class="detail-section">
+          <h3 class="detail-section__title">Mensagem completa</h3>
+          <pre class="detail-message" id="detailMessage">—</pre>
+        </div>
+
+        <!-- Sugestão da Knowledge Base (preenchida só quando houver match) -->
+        <div class="detail-section detail-section--kb" id="detailKbWrap" hidden>
+          <h3 class="detail-section__title">
+            <span class="kb-badge" aria-hidden="true">KB</span>
+            Padrão reconhecido
+          </h3>
+          <article class="kb-suggestion" id="detailKbCard">
+            <header class="kb-suggestion__head">
+              <span class="kb-suggestion__id" id="detailKbId">—</span>
+              <span class="kb-suggestion__cat" id="detailKbCat">—</span>
+              <span class="kb-suggestion__sev" id="detailKbSev">—</span>
+            </header>
+            <h4 class="kb-suggestion__title" id="detailKbTitle">—</h4>
+            <p class="kb-suggestion__solucao" id="detailKbSolucao">—</p>
+          </article>
+        </div>
+      </section>
+
+      <footer class="drawer__footer">
+        <button class="btn btn--ghost btn--sm" type="button" id="detailCopyBtn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+          <span>Copiar JSON</span>
+        </button>
+        <p class="drawer__footer-meta" id="detailMetaFoot">—</p>
+      </footer>
+    </div>
+  </aside>
+
   <!-- ============================ MODAL: NOVO CLIENTE ============================ -->
   <div class="modal" id="clientModal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="clientModalTitle">
     <div class="modal__backdrop" data-close></div>
