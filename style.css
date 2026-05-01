@@ -729,6 +729,15 @@ h1, h2, h3, h4, p { margin: 0; }
   display: inline-block;
   margin-left: 4px;
   animation: dots 1.2s steps(3, end) infinite;
+ .btn.is-loading span::after {
+  content: '…';
+  display: inline-block;
+  width: 1.2em;          /* trava a largura */
+  text-align: left;       /* dots crescem pra direita sem mover o resto */
+  margin-left: 4px;
+  animation: dots 1.2s steps(3, end) infinite;
+}
+
 }
 @keyframes dots {
   0%, 20% { content: ''; }
