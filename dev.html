@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0B1B33" />
+  <title>Central de Desenvolvedor — God Mode</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Backdrop com gradiente + blobs de luz (profundidade premium) -->
+  <div class="backdrop" aria-hidden="true">
+    <div class="blob blob--a"></div>
+    <div class="blob blob--b"></div>
+  </div>
+
+  <!-- Layout principal -->
+  <div class="app-shell">
+
+    <!-- ============================ SIDEBAR ============================ -->
+    <aside class="sidebar" aria-label="Navegação de clientes">
+      <header class="sidebar__brand">
+        <div class="sidebar__logo" aria-hidden="true">
+          <span class="sidebar__logo-dot"></span>
+        </div>
+        <div class="sidebar__brand-text">
+          <h1 class="sidebar__title">God Mode</h1>
+          <p class="sidebar__subtitle">Central de Desenvolvedor</p>
+        </div>
+      </header>
+
+      <nav class="sidebar__nav" aria-label="Lista de empresas">
+        <p class="sidebar__nav-label">Empresas</p>
+        <ul class="client-list" id="clientList" role="list">
+          <!-- Itens injetados via JS na Fase 3 -->
+          <li class="client-list__placeholder">Carregando empresas…</li>
+        </ul>
+      </nav>
+
+      <footer class="sidebar__footer">
+        <div class="status-pill" id="connectionStatus" data-state="loading">
+          <span class="status-pill__dot"></span>
+          <span class="status-pill__text">Conectando…</span>
+        </div>
+      </footer>
+    </aside>
+
+    <!-- ============================ MAIN AREA ============================ -->
+    <main class="main" role="main">
+
+      <!-- Topbar -->
+      <header class="topbar">
+        <div class="topbar__heading">
+          <h2 class="topbar__title" id="mainTitle">Visão Geral</h2>
+          <p class="topbar__subtitle" id="mainSubtitle">
+            Telemetria consolidada de todos os ecossistemas
+          </p>
+        </div>
+
+        <div class="topbar__actions">
+          <button class="btn btn--ghost" id="refreshBtn" type="button" aria-label="Atualizar dados">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 12a9 9 0 1 1-3-6.7L21 8"/>
+              <path d="M21 3v5h-5"/>
+            </svg>
+            <span>Atualizar</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- KPIs -->
+      <section class="kpi-grid" aria-label="Indicadores gerais">
+        <article class="kpi-card">
+          <p class="kpi-card__label">Total de Logs</p>
+          <p class="kpi-card__value" id="kpiTotal">—</p>
+        </article>
+        <article class="kpi-card kpi-card--danger">
+          <p class="kpi-card__label">Erros Críticos</p>
+          <p class="kpi-card__value" id="kpiErros">—</p>
+        </article>
+        <article class="kpi-card kpi-card--warning">
+          <p class="kpi-card__label">Alertas</p>
+          <p class="kpi-card__value" id="kpiAlertas">—</p>
+        </article>
+        <article class="kpi-card kpi-card--info">
+          <p class="kpi-card__label">Informativos</p>
+          <p class="kpi-card__value" id="kpiInfos">—</p>
+        </article>
+      </section>
+
+      <!-- Lista de Logs -->
+      <section class="logs-section" aria-label="Logs do sistema">
+        <header class="logs-section__header">
+          <h3 class="logs-section__title">Eventos Recentes</h3>
+          <p class="logs-section__meta" id="logsMeta">—</p>
+        </header>
+
+        <div class="logs-list" id="logsList" role="list">
+          <!-- Cards injetados via JS na Fase 3 -->
+          <div class="empty-state" id="emptyState">
+            <div class="empty-state__icon" aria-hidden="true">∅</div>
+            <p class="empty-state__title">Carregando eventos…</p>
+            <p class="empty-state__text">Buscando dados da Planilha Mestra.</p>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="dev.js" defer></script>
+</body>
+</html>
