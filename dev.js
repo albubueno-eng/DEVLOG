@@ -11,6 +11,7 @@
  *    - Render idempotente (mesmo state = mesmo DOM)
  *    - Event delegation (zero listeners duplicados)
  *    - DOM seguro (textContent, sem innerHTML em conteúdo dinâmico)
+ *    - Erros descritivos e acionáveis (padrão Stripe)
  * ============================================================================
  */
 
@@ -28,7 +29,10 @@
     LIMIT: 500,
 
     // Auto-refresh opcional (em ms). 0 = desativado.
-    AUTO_REFRESH_MS: 0
+    AUTO_REFRESH_MS: 0,
+
+    // Timeout do fetch (ms). Apps Script tem cold start de ~10s.
+    FETCH_TIMEOUT_MS: 20000
   };
 
   // ==========================================================================
@@ -48,12 +52,12 @@
   // 3. SELETORES DOM (cacheados uma única vez)
   // ==========================================================================
   const dom = {
-    clientList:    document.getElementById('clientList'),
-    logsList:      document.getElementById('logsList'),
-    logsMeta:      document.getElementById('logsMeta'),
-    mainTitle:     document.getElementById('mainTitle'),
-    mainSubtitle:  document.getElementById('mainSubtitle'),
-    refreshBtn:    document.getElementById('refreshBtn'),
+    clientList:       document.getElementById('clientList'),
+    logsList:         document.getElementById('logsList'),
+    logsMeta:         document.getElementById('logsMeta'),
+    mainTitle:        document.getElementById('mainTitle'),
+    mainSubtitle:     document.getElementById('mainSubtitle'),
+    refreshBtn:       document.getElementById('refreshBtn'),
     connectionStatus: document.getElementById('connectionStatus'),
     kpi: {
       total:    document.getElementById('kpiTotal'),
@@ -69,17 +73,50 @@
   async function fetchDashboardData() {
     const url = `${CONFIG.URL_DO_APPS_SCRIPT}?apiKey=${encodeURIComponent(CONFIG.API_KEY)}&limit=${CONFIG.LIMIT}`;
 
-    const resp = await fetch(url, {
-      method: 'GET',
-      // text/plain evita preflight CORS no Apps Script (ver Fase 1)
-      redirect: 'follow'
-    });
+    const ctrl = new AbortController();
+    const timeoutId = setTimeout(() => ctrl.abort(), CONFIG.FETCH_TIMEOUT_MS);
+
+    let resp;
+    try {
+      resp = await fetch(url, {
+        method: 'GET',
+        mode: 'cors',
+        credentials: 'omit',
+        cache: 'no-store',
+        redirect: 'follow',
+        signal: ctrl.signal
+      });
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        throw new Error(`Tempo de resposta excedido (${CONFIG.FETCH_TIMEOUT_MS / 1000}s). Tente novamente.`);
+      }
+      // CORS, rede offline, extensão bloqueando, DNS, etc.
+      throw new Error(
+        'Falha de rede ou CORS. Confirme: (1) implantação atualizada com NOVA VERSÃO, ' +
+        '(2) "Quem pode acessar" = Qualquer pessoa, (3) teste em aba anônima sem extensões.'
+      );
+    }
+    clearTimeout(timeoutId);
 
     if (!resp.ok) {
-      throw new Error(`HTTP ${resp.status}`);
+      throw new Error(`HTTP ${resp.status} — implantação inválida ou sem permissão pública.`);
     }
 
-    const json = await resp.json();
+    // Lê como texto primeiro para conseguir diagnosticar respostas não-JSON
+    const raw = await resp.text();
+
+    let json;
+    try {
+      json = JSON.parse(raw);
+    } catch (err) {
+      console.error('[GodMode] Resposta não-JSON recebida:', raw.slice(0, 300));
+      if (raw.includes('<!DOCTYPE') || raw.includes('accounts.google.com')) {
+        throw new Error('Apps Script exigiu login. Reimplante como "Qualquer pessoa" + Nova versão.');
+      }
+      throw new Error('Resposta do servidor não é JSON válido. Veja o console para detalhes.');
+    }
+
     if (!json.ok) {
       throw new Error(json.error || 'Resposta inválida do servidor');
     }
@@ -110,8 +147,8 @@
 
   function setFilter(clienteId) {
     state.filtroClienteId = clienteId || '';
-    renderSidebar();   // atualiza estado visual ativo
-    renderMain();      // re-renderiza KPIs + logs filtrados
+    renderSidebar();
+    renderMain();
   }
 
   // ==========================================================================
@@ -126,7 +163,7 @@
     const r = { total: logs.length, erros: 0, alertas: 0, infos: 0 };
     for (const l of logs) {
       const t = String(l.tipoLog || '').toUpperCase();
-      if (t === 'ERRO')    r.erros++;
+      if (t === 'ERRO')        r.erros++;
       else if (t === 'ALERTA') r.alertas++;
       else if (t === 'INFO')   r.infos++;
     }
@@ -155,7 +192,7 @@
   // ---- Sidebar ----
   function renderSidebar() {
     const ul = dom.clientList;
-    ul.textContent = ''; // limpa
+    ul.textContent = '';
     const contagens = contarLogsPorCliente();
     const ativoId   = state.filtroClienteId;
 
@@ -194,7 +231,7 @@
     btn.type = 'button';
     btn.className = 'client-item' + (ativo ? ' client-item--active' : '') +
                     (modificador ? ' ' + modificador : '');
-    btn.dataset.clientId = id; // event delegation usa isso
+    btn.dataset.clientId = id;
     btn.setAttribute('aria-pressed', ativo ? 'true' : 'false');
 
     const nameEl = document.createElement('span');
@@ -247,7 +284,6 @@
     const list = dom.logsList;
     list.textContent = '';
 
-    // Estados especiais
     if (state.isLoading && !logs.length) {
       list.appendChild(buildEmptyState({
         icon: '◐',
@@ -515,7 +551,7 @@
     } catch (err) {
       console.error('[GodMode] Falha no fetch:', err);
       setError(err);
-      renderMain(); // mostra error state
+      renderMain();
     } finally {
       setLoading(false);
     }
