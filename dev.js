@@ -21,8 +21,8 @@
   // 1. CONFIGURAÇÃO  ← EDITE AQUI
   // ==========================================================================
   const CONFIG = {
-    URL_DO_APPS_SCRIPT: 'COLE_AQUI_A_URL_/exec_DA_SUA_IMPLANTACAO',
-    API_KEY: 'COLE_AQUI_A_MESMA_API_KEY_DO_BACKEND',
+    URL_DO_APPS_SCRIPT: 'https://script.google.com/macros/s/AKfycbx7YBpAS0GwwcvnKA0_2GjbPSYLpFan1XcLjyHkCJl8PZ99U3F5E9-1kyaOPgdTXw1-/exec',
+    API_KEY: 'ee91297b-685b-4ae4-b131-8434841c882e',
 
     // Limite de logs por requisição (alinhado com o MAX_LIMIT do backend)
     LIMIT: 500,
