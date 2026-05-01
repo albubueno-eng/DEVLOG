@@ -56,7 +56,7 @@
       </footer>
     </aside>
 
-    <!-- ============================ MAIN AREA ============================ -->
+       <!-- ============================ MAIN AREA ============================ -->
     <main class="main" role="main">
 
       <!-- Topbar -->
@@ -80,8 +80,45 @@
         </div>
       </header>
 
-      <!-- KPIs -->
-      <section class="kpi-grid" aria-label="Indicadores gerais">
+      <!-- KPIs Operacionais (primeira linha — telemetria comportamental) -->
+      <section class="kpi-grid kpi-grid--ops" aria-label="Indicadores operacionais">
+        <article class="kpi-card kpi-card--live">
+          <p class="kpi-card__label">
+            <span class="live-dot" aria-hidden="true"></span>
+            Online Agora
+          </p>
+          <p class="kpi-card__value" id="kpiOnline">—</p>
+        </article>
+        <article class="kpi-card">
+          <p class="kpi-card__label">Logins Hoje</p>
+          <p class="kpi-card__value" id="kpiLogins">—</p>
+        </article>
+        <article class="kpi-card kpi-card--danger">
+          <p class="kpi-card__label">Falhas de Login Hoje</p>
+          <p class="kpi-card__value" id="kpiFalhas">—</p>
+        </article>
+        <article class="kpi-card kpi-card--warning">
+          <p class="kpi-card__label">Sessões Expiradas Hoje</p>
+          <p class="kpi-card__value" id="kpiExpiradas">—</p>
+        </article>
+      </section>
+
+      <!-- Live Activity Strip -->
+      <section class="live-strip" aria-label="Atividade ao vivo">
+        <header class="live-strip__header">
+          <h3 class="live-strip__title">
+            <span class="live-dot" aria-hidden="true"></span>
+            Atividade ao Vivo
+          </h3>
+          <p class="live-strip__meta" id="liveStripMeta">—</p>
+        </header>
+        <div class="live-strip__list" id="liveStripList" role="list">
+          <!-- chips injetados via JS -->
+        </div>
+      </section>
+
+      <!-- KPIs de Logs (segunda linha) -->
+      <section class="kpi-grid" aria-label="Indicadores de logs">
         <article class="kpi-card">
           <p class="kpi-card__label">Total de Logs</p>
           <p class="kpi-card__value" id="kpiTotal">—</p>
@@ -100,15 +137,31 @@
         </article>
       </section>
 
-      <!-- Lista de Logs -->
-      <section class="logs-section" aria-label="Logs do sistema">
-        <header class="logs-section__header">
-          <h3 class="logs-section__title">Eventos Recentes</h3>
-          <p class="logs-section__meta" id="logsMeta">—</p>
+      <!-- Tabs + Lista de Eventos -->
+      <section class="events-section" aria-label="Eventos do sistema">
+        <header class="events-section__header">
+          <div class="tabs" role="tablist" id="eventTabs">
+            <button class="tab tab--active" type="button" role="tab"
+                    aria-selected="true" data-tab="logs">
+              Logs
+              <span class="tab__count" id="tabCountLogs">0</span>
+            </button>
+            <button class="tab" type="button" role="tab"
+                    aria-selected="false" data-tab="auth">
+              Auth
+              <span class="tab__count" id="tabCountAuth">0</span>
+            </button>
+            <button class="tab" type="button" role="tab"
+                    aria-selected="false" data-tab="sessions">
+              Sessões
+              <span class="tab__count" id="tabCountSessions">0</span>
+            </button>
+          </div>
+          <p class="events-section__meta" id="logsMeta">—</p>
         </header>
 
-        <div class="logs-list" id="logsList" role="list">
-          <!-- Cards injetados via JS na Fase 3 -->
+        <div class="events-list" id="logsList" role="list">
+          <!-- conteúdo da tab ativa, injetado via JS -->
           <div class="empty-state" id="emptyState">
             <div class="empty-state__icon" aria-hidden="true">∅</div>
             <p class="empty-state__title">Carregando eventos…</p>
@@ -118,7 +171,6 @@
       </section>
 
     </main>
-  </div>
 
   <!-- ============================ MODAL: NOVO CLIENTE ============================ -->
   <div class="modal" id="clientModal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="clientModalTitle">
