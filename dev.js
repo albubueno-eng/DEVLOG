@@ -39,10 +39,10 @@
   // 2. ESTADO GLOBAL (single source of truth)
   // ==========================================================================
   const state = {
-    clientes: [],         // [{ idCliente, nomeCliente, ativo }]
-    logs: [],             // logs crus vindos do backend
-    totais: null,         // { totalLogs, totalErros, totalAlertas, totalInfos }
-    filtroClienteId: '',  // '' = todos
+    clientes: [],
+    logs: [],
+    totais: null,
+    filtroClienteId: '',
     isLoading: false,
     error: null,
     geradoEm: null
@@ -65,6 +65,18 @@
       alertas:  document.getElementById('kpiAlertas'),
       infos:    document.getElementById('kpiInfos')
     }
+  };
+
+  // Modal de novo cliente (pode não existir ainda em layouts antigos)
+  const modal = {
+    root:      document.getElementById('clientModal'),
+    form:      document.getElementById('clientForm'),
+    fldId:     document.getElementById('fldClientId'),
+    fldName:   document.getElementById('fldClientName'),
+    fldActive: document.getElementById('fldClientActive'),
+    saveBtn:   document.getElementById('clientSaveBtn'),
+    formError: document.getElementById('clientFormError'),
+    openBtn:   document.getElementById('newClientBtn')
   };
 
   // ==========================================================================
@@ -91,7 +103,6 @@
       if (err.name === 'AbortError') {
         throw new Error(`Tempo de resposta excedido (${CONFIG.FETCH_TIMEOUT_MS / 1000}s). Tente novamente.`);
       }
-      // CORS, rede offline, extensão bloqueando, DNS, etc.
       throw new Error(
         'Falha de rede ou CORS. Confirme: (1) implantação atualizada com NOVA VERSÃO, ' +
         '(2) "Quem pode acessar" = Qualquer pessoa, (3) teste em aba anônima sem extensões.'
@@ -103,9 +114,7 @@
       throw new Error(`HTTP ${resp.status} — implantação inválida ou sem permissão pública.`);
     }
 
-    // Lê como texto primeiro para conseguir diagnosticar respostas não-JSON
     const raw = await resp.text();
-
     let json;
     try {
       json = JSON.parse(raw);
@@ -120,6 +129,32 @@
     if (!json.ok) {
       throw new Error(json.error || 'Resposta inválida do servidor');
     }
+    return json.data;
+  }
+
+  /**
+   * POST genérico para o backend (ações: createClient, updateClient, etc.)
+   * Usa text/plain para evitar preflight CORS (mesmo padrão dos logs).
+   */
+  async function apiPost(action, payload) {
+    const resp = await fetch(CONFIG.URL_DO_APPS_SCRIPT, {
+      method: 'POST',
+      mode: 'cors',
+      credentials: 'omit',
+      cache: 'no-store',
+      redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        apiKey: CONFIG.API_KEY,
+        action,
+        ...payload
+      })
+    });
+    const raw = await resp.text();
+    let json;
+    try { json = JSON.parse(raw); }
+    catch { throw new Error('Resposta inválida do servidor'); }
+    if (!json.ok) throw new Error(json.error || 'Falha na operação');
     return json.data;
   }
 
@@ -152,7 +187,7 @@
   }
 
   // ==========================================================================
-  // 6. SELETORES DERIVADOS  (computam visões a partir do state cru)
+  // 6. SELETORES DERIVADOS
   // ==========================================================================
   function getLogsFiltrados() {
     if (!state.filtroClienteId) return state.logs;
@@ -189,14 +224,12 @@
   // 7. RENDER LAYER
   // ==========================================================================
 
-  // ---- Sidebar ----
   function renderSidebar() {
     const ul = dom.clientList;
     ul.textContent = '';
     const contagens = contarLogsPorCliente();
     const ativoId   = state.filtroClienteId;
 
-    // Item "Todos os Clientes" no topo
     ul.appendChild(buildClientItem({
       id: '',
       nome: 'Todos os Clientes',
@@ -226,7 +259,6 @@
 
   function buildClientItem({ id, nome, count, ativo, modificador }) {
     const li = document.createElement('li');
-
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'client-item' + (ativo ? ' client-item--active' : '') +
@@ -248,7 +280,6 @@
     return li;
   }
 
-  // ---- Main (header + KPIs + logs) ----
   function renderMain() {
     const logsFiltrados = getLogsFiltrados();
     const kpis = calcularKPIs(logsFiltrados);
@@ -309,7 +340,6 @@
       return;
     }
 
-    // Render em DocumentFragment → uma única operação no DOM (performance)
     const frag = document.createDocumentFragment();
     for (const log of logs) {
       frag.appendChild(buildLogCard(log));
@@ -328,13 +358,11 @@
     card.className = `log-card ${tipoClass}`.trim();
     card.setAttribute('role', 'listitem');
 
-    // Ícone tipográfico
     const icon = document.createElement('div');
     icon.className = 'log-card__icon';
     icon.setAttribute('aria-hidden', 'true');
     icon.textContent = tipo === 'ERRO' ? '!' : tipo === 'ALERTA' ? '▲' : 'i';
 
-    // Body
     const body = document.createElement('div');
     body.className = 'log-card__body';
 
@@ -365,7 +393,6 @@
     body.appendChild(message);
     body.appendChild(meta);
 
-    // Timestamp (relativo + tooltip absoluto)
     const time = document.createElement('time');
     time.className = 'log-card__time';
     const tsAbs = formatAbsoluteTime(log.timestamp);
@@ -433,7 +460,6 @@
     return wrap;
   }
 
-  // ---- Status de conexão ----
   function updateConnectionStatus() {
     const pill = dom.connectionStatus;
     if (!pill) return;
@@ -459,7 +485,7 @@
   }
 
   // ==========================================================================
-  // 8. EVENT LAYER  (delegation + listeners diretos onde faz sentido)
+  // 8. EVENT LAYER
   // ==========================================================================
   function bindEvents() {
     // Filtro de cliente — UM listener, captura todos os botões
@@ -484,7 +510,7 @@
     // Botão Atualizar
     dom.refreshBtn.addEventListener('click', loadData);
 
-    // Atalho global: R recarrega (padrão Linear/Notion)
+    // Atalho global: R recarrega
     document.addEventListener('keydown', (ev) => {
       if (ev.key.toLowerCase() === 'r' && !ev.metaKey && !ev.ctrlKey
           && document.activeElement.tagName !== 'INPUT'
@@ -495,7 +521,127 @@
   }
 
   // ==========================================================================
-  // 9. UTILITIES
+  // 9. CLIENT MODAL  (cadastro de cliente pela Central)
+  // ==========================================================================
+  function openClientModal() {
+    if (!modal.root) return;
+    modal.form.reset();
+    modal.fldActive.checked = true;
+    modal.formError.hidden = true;
+    clearFieldErrors();
+
+    modal.root.hidden = false;
+    modal.root.setAttribute('aria-hidden', 'false');
+    requestAnimationFrame(() => modal.fldId.focus());
+  }
+
+  function closeClientModal() {
+    if (!modal.root) return;
+    modal.root.hidden = true;
+    modal.root.setAttribute('aria-hidden', 'true');
+    setSaveButtonLoading(false);
+  }
+
+  function setSaveButtonLoading(isLoading) {
+    if (!modal.saveBtn) return;
+    modal.saveBtn.classList.toggle('is-loading', isLoading);
+    modal.saveBtn.disabled = isLoading;
+    const span = modal.saveBtn.querySelector('span');
+    if (span) span.textContent = isLoading ? 'Cadastrando' : 'Cadastrar Cliente';
+  }
+
+  function clearFieldErrors() {
+    if (!modal.fldId) return;
+    modal.fldId.classList.remove('is-invalid');
+    modal.fldName.classList.remove('is-invalid');
+    document.querySelectorAll('[data-error-for]').forEach(el => { el.textContent = ''; });
+    if (modal.formError) {
+      modal.formError.hidden = true;
+      modal.formError.textContent = '';
+    }
+  }
+
+  function setFieldError(name, msg) {
+    const el = document.querySelector(`[data-error-for="${name}"]`);
+    if (el) el.textContent = msg;
+    if (name === 'idCliente'   && modal.fldId)   modal.fldId.classList.add('is-invalid');
+    if (name === 'nomeCliente' && modal.fldName) modal.fldName.classList.add('is-invalid');
+  }
+
+  function setFormError(msg) {
+    if (!modal.formError) return;
+    modal.formError.textContent = msg;
+    modal.formError.hidden = false;
+  }
+
+  function validateClientForm({ idCliente, nomeCliente }) {
+    let ok = true;
+    if (!idCliente) {
+      setFieldError('idCliente', 'Obrigatório');
+      ok = false;
+    } else if (!/^[a-z0-9_-]+$/.test(idCliente)) {
+      setFieldError('idCliente', 'Use apenas letras minúsculas, números, - ou _');
+      ok = false;
+    } else if (state.clientes.some(c => String(c.idCliente).toLowerCase() === idCliente)) {
+      setFieldError('idCliente', 'Já existe um cliente com esse ID');
+      ok = false;
+    }
+    if (!nomeCliente) {
+      setFieldError('nomeCliente', 'Obrigatório');
+      ok = false;
+    }
+    return ok;
+  }
+
+  async function handleClientSubmit(ev) {
+    ev.preventDefault();
+    clearFieldErrors();
+
+    const idCliente   = modal.fldId.value.trim().toLowerCase();
+    const nomeCliente = modal.fldName.value.trim();
+    const ativo       = modal.fldActive.checked;
+
+    if (!validateClientForm({ idCliente, nomeCliente })) return;
+
+    setSaveButtonLoading(true);
+    try {
+      await apiPost('createClient', { idCliente, nomeCliente, ativo });
+      closeClientModal();
+      await loadData();
+      setFilter(idCliente);
+    } catch (err) {
+      console.error('[GodMode] Falha ao criar cliente:', err);
+      setFormError(err.message || 'Não foi possível cadastrar. Tente novamente.');
+      setSaveButtonLoading(false);
+    }
+  }
+
+  function bindClientModalEvents() {
+    if (!modal.openBtn || !modal.root) return;
+
+    modal.openBtn.addEventListener('click', openClientModal);
+
+    // Fecha em qualquer elemento com [data-close]
+    modal.root.addEventListener('click', (ev) => {
+      if (ev.target.closest('[data-close]')) closeClientModal();
+    });
+
+    // ESC fecha
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape' && !modal.root.hidden) closeClientModal();
+    });
+
+    modal.form.addEventListener('submit', handleClientSubmit);
+
+    // Sanitização do ID em tempo real
+    modal.fldId.addEventListener('input', () => {
+      const val = modal.fldId.value.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      if (val !== modal.fldId.value) modal.fldId.value = val;
+    });
+  }
+
+  // ==========================================================================
+  // 10. UTILITIES
   // ==========================================================================
   function formatNumber(n) {
     if (n === null || n === undefined || isNaN(n)) return '—';
@@ -531,17 +677,16 @@
   }
 
   // ==========================================================================
-  // 10. ORCHESTRATION
+  // 11. ORCHESTRATION
   // ==========================================================================
   async function loadData() {
-    if (state.isLoading) return;       // proteção contra duplo-clique
+    if (state.isLoading) return;
     setLoading(true);
     setError(null);
 
     try {
       const data = await fetchDashboardData();
       setData(data);
-      // Mantém o filtro atual se o cliente ainda existe; senão volta pra "todos"
       if (state.filtroClienteId &&
           !state.clientes.some(c => String(c.idCliente) === String(state.filtroClienteId))) {
         state.filtroClienteId = '';
@@ -558,7 +703,6 @@
   }
 
   function init() {
-    // Sanity check de configuração
     if (CONFIG.URL_DO_APPS_SCRIPT.startsWith('COLE_AQUI') ||
         CONFIG.API_KEY.startsWith('COLE_AQUI')) {
       setError(new Error('Configure URL_DO_APPS_SCRIPT e API_KEY no topo do dev.js'));
@@ -567,6 +711,7 @@
     }
 
     bindEvents();
+    bindClientModalEvents();
     loadData();
 
     if (CONFIG.AUTO_REFRESH_MS > 0) {
@@ -574,7 +719,6 @@
     }
   }
 
-  // Boot quando o DOM estiver pronto (defer já garante, mas segurança extra)
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
