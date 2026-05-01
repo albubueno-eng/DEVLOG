@@ -63,9 +63,68 @@
         INFO:    true
       },
       theme: 'light',              // 'light' | 'dark'
-      capacityOpen: false          // drawer Capacity Monitor aberto?
+      capacityOpen: false,         // drawer Capacity Monitor aberto?
+      detailOpen: false,           // drawer Detalhe do evento aberto?
+      detailContext: null          // { kind:'log'|'auth'|'session', data:{}, kbMatch:{} }
     }
   };
+
+  // ==========================================================================
+  // 2.b KNOWLEDGE BASE — 40 padrões (espelhada do backend para matching local)
+  //     Mantida embutida para diagnóstico INSTANTÂNEO (zero round-trip).
+  // ==========================================================================
+  const KB_PATTERNS = [
+    { id:'sh-001', categoria:'sheets', regex:/Service invoked too many times/i,         titulo:'Quota de execuções esgotada',       severidade:'ERRO',   solucao:'Implementar batch + cache; reduzir frequência de gravações.' },
+    { id:'sh-002', categoria:'sheets', regex:/Exceeded maximum execution time/i,        titulo:'Timeout 6 min do Apps Script',      severidade:'ERRO',   solucao:'Quebrar em chunks via PropertiesService + trigger.' },
+    { id:'sh-003', categoria:'sheets', regex:/limit.*cells|10.?000.?000/i,              titulo:'Limite de 10M células atingido',    severidade:'ERRO',   solucao:'Migrar dados frios; arquivar abas antigas.' },
+    { id:'sh-004', categoria:'sheets', regex:/Range not found|aba não encontrada/i,     titulo:'Range/aba não encontrada',          severidade:'ALERTA',solucao:'Verificar nomes via getSheetByName antes de getRange.' },
+    { id:'sh-005', categoria:'sheets', regex:/getValue.*null|getValues.*null/i,         titulo:'Leitura de célula vazia',           severidade:'INFO',  solucao:'Validar com getLastRow/Column antes de ler.' },
+    { id:'sh-006', categoria:'sheets', regex:/Lock timeout|waitLock/i,                  titulo:'LockService travado',               severidade:'ALERTA',solucao:'Reduzir tempo crítico; usar tryLock(0) com retry.' },
+    { id:'sh-007', categoria:'sheets', regex:/too large|payload exceeded/i,             titulo:'Payload de escrita > 50MB',         severidade:'ERRO',   solucao:'Quebrar setValues em blocos de 5k linhas.' },
+    { id:'sh-008', categoria:'sheets', regex:/do not have permission|access denied/i,   titulo:'Permissão de planilha revogada',    severidade:'ERRO',   solucao:'Reautorizar conta de serviço; validar OAuth scopes.' },
+    { id:'sh-009', categoria:'sheets', regex:/Document.*deleted|file not found/i,       titulo:'Documento excluído',                severidade:'ERRO',   solucao:'Restaurar do Drive Trash em até 30d.' },
+    { id:'sh-010', categoria:'sheets', regex:/Authorization is required/i,              titulo:'Token expirado',                    severidade:'ERRO',   solucao:'Forçar reLogin; renovar refresh_token.' },
+    { id:'nw-001', categoria:'rede',   regex:/DNS|getaddrinfo|ENOTFOUND/i,              titulo:'Falha de DNS',                      severidade:'ERRO',   solucao:'Verificar conectividade e DNS.' },
+    { id:'nw-002', categoria:'rede',   regex:/ECONNREFUSED|connection refused/i,        titulo:'Conexão recusada',                  severidade:'ERRO',   solucao:'Endpoint offline; ativar fallback.' },
+    { id:'nw-003', categoria:'rede',   regex:/ETIMEDOUT|timeout|timed out/i,            titulo:'Timeout de fetch',                  severidade:'ALERTA',solucao:'Aumentar timeout ou usar circuit breaker.' },
+    { id:'nw-004', categoria:'rede',   regex:/CORS|Access-Control-Allow/i,              titulo:'CORS bloqueado',                    severidade:'ERRO',   solucao:'Configurar Access-Control-Allow-Origin no servidor.' },
+    { id:'nw-005', categoria:'rede',   regex:/SSL|certificate|TLS/i,                    titulo:'Certificado SSL inválido',          severidade:'ERRO',   solucao:'Renovar TLS; conferir cadeia.' },
+    { id:'nw-006', categoria:'rede',   regex:/429|Too Many Requests|rate limit/i,       titulo:'Rate limit',                        severidade:'ALERTA',solucao:'Backoff exponencial + jitter.' },
+    { id:'nw-007', categoria:'rede',   regex:/502|503|504|gateway/i,                    titulo:'Gateway/upstream',                  severidade:'ALERTA',solucao:'Retry com circuit breaker.' },
+    { id:'nw-008', categoria:'rede',   regex:/NetworkError|Failed to fetch/i,           titulo:'Falha de rede no client',           severidade:'ALERTA',solucao:'Detectar offline + retry on visibility.' },
+    { id:'au-001', categoria:'auth',   regex:/invalid_grant|token revoked/i,            titulo:'Token revogado',                    severidade:'ERRO',   solucao:'Forçar reautenticação OAuth.' },
+    { id:'au-002', categoria:'auth',   regex:/401|Unauthorized/i,                       titulo:'Sem credenciais válidas',           severidade:'ERRO',   solucao:'Renovar API key/token.' },
+    { id:'au-003', categoria:'auth',   regex:/403|Forbidden/i,                          titulo:'Permissão negada',                  severidade:'ERRO',   solucao:'Verificar roles do usuário.' },
+    { id:'au-004', categoria:'auth',   regex:/session.*expired|sess(a|ã)o.*expirad/i,   titulo:'Sessão expirada',                   severidade:'INFO',  solucao:'Comportamento esperado após 90s sem heartbeat.' },
+    { id:'au-005', categoria:'auth',   regex:/wrong password|senha incorreta/i,         titulo:'Login falho',                       severidade:'ALERTA',solucao:'Bloquear após 5 tentativas em 10min.' },
+    { id:'au-006', categoria:'auth',   regex:/2FA|two-factor|TOTP/i,                    titulo:'2FA pendente',                      severidade:'INFO',  solucao:'Aguardar código TOTP do usuário.' },
+    { id:'dt-001', categoria:'dados',  regex:/undefined is not|Cannot read prop/i,      titulo:'Acesso a undefined',                severidade:'ERRO',   solucao:'Optional chaining + default values.' },
+    { id:'dt-002', categoria:'dados',  regex:/NaN|Invalid Number/i,                     titulo:'Conversão numérica falha',          severidade:'ALERTA',solucao:'Number(x) com isFinite() check.' },
+    { id:'dt-003', categoria:'dados',  regex:/Invalid Date/i,                           titulo:'Data inválida',                     severidade:'ALERTA',solucao:'ISO-8601 obrigatório; validar antes de new Date().' },
+    { id:'dt-004', categoria:'dados',  regex:/JSON.parse|Unexpected token/i,            titulo:'JSON malformado',                   severidade:'ERRO',   solucao:'try/catch + logar primeiros 200 chars.' },
+    { id:'dt-005', categoria:'dados',  regex:/duplicate.*key|UNIQUE constraint/i,       titulo:'Chave duplicada',                   severidade:'ALERTA',solucao:'Upsert em vez de insert.' },
+    { id:'dt-006', categoria:'dados',  regex:/foreign key|FK constraint/i,              titulo:'FK órfã',                           severidade:'ALERTA',solucao:'Cascata ou validação prévia.' },
+    { id:'dt-007', categoria:'dados',  regex:/string.*too long|too long for type/i,     titulo:'String estourou limite',            severidade:'INFO',  solucao:'Truncar antes de gravar (slice).' },
+    { id:'dt-008', categoria:'dados',  regex:/required.*missing|campo obrigat/i,        titulo:'Campo obrigatório ausente',         severidade:'ALERTA',solucao:'Validar payload no client + server.' },
+    { id:'rt-001', categoria:'device', regex:/out of memory|allocation failed|OOM/i,    titulo:'Out Of Memory',                     severidade:'ERRO',   solucao:'Streamar dados; paginar; liberar refs.' },
+    { id:'rt-002', categoria:'device', regex:/storage.*full|QuotaExceededError/i,       titulo:'localStorage cheio',                severidade:'ALERTA',solucao:'Purgar caches antigos; usar IndexedDB.' },
+    { id:'rt-003', categoria:'device', regex:/IndexedDB|IDB.*error/i,                   titulo:'IndexedDB falhou',                  severidade:'ALERTA',solucao:'Fallback para memória; alertar usuário.' },
+    { id:'rt-004', categoria:'device', regex:/ServiceWorker|sw\.js/i,                   titulo:'Service Worker erro',               severidade:'INFO',  solucao:'Limpar cache do SW; reinstalar.' },
+    { id:'rt-005', categoria:'device', regex:/GPU.*lost|WebGL context/i,                titulo:'Contexto GPU perdido',              severidade:'ALERTA',solucao:'Reinicializar canvas; degradar para 2D.' },
+    { id:'rt-006', categoria:'device', regex:/battery|low power/i,                      titulo:'Modo baixa energia',                severidade:'INFO',  solucao:'Reduzir polling; pausar animações.' },
+    { id:'rt-007', categoria:'device', regex:/permission.*camera|microphone|geo/i,      titulo:'Permissão de mídia negada',         severidade:'ALERTA',solucao:'Solicitar via gesto do usuário; explicar uso.' },
+    { id:'rt-008', categoria:'device', regex:/Maximum call stack|stack overflow/i,      titulo:'Stack overflow',                    severidade:'ERRO',   solucao:'Trocar recursão por iteração; checar caso-base.' }
+  ];
+
+  // Encontra o PRIMEIRO padrão que casa com o texto. Retorna null se nenhum.
+  function findPatternMatch(text) {
+    if (!text) return null;
+    const s = String(text);
+    for (let i = 0; i < KB_PATTERNS.length; i++) {
+      if (KB_PATTERNS[i].regex.test(s)) return KB_PATTERNS[i];
+    }
+    return null;
+  }
 
   // ==========================================================================
   // 3. SELETORES DOM
@@ -126,7 +185,22 @@
     capacityDrawerSubtitle: document.getElementById('capacityDrawerSubtitle'),
     capacitySummary:  document.getElementById('capacitySummary'),
     capacityList:     document.getElementById('capacityList'),
-    capacityMeta:     document.getElementById('capacityMeta')
+    capacityMeta:     document.getElementById('capacityMeta'),
+
+    // ─── NOVO Wave 1: Detail Drawer (log/auth/session) ─────────────────────
+    detailDrawer:        document.getElementById('detailDrawer'),
+    detailDrawerTitle:   document.getElementById('detailDrawerTitle'),
+    detailDrawerSubtitle:document.getElementById('detailDrawerSubtitle'),
+    detailMeta:          document.getElementById('detailMeta'),
+    detailMessage:       document.getElementById('detailMessage'),
+    detailKbWrap:        document.getElementById('detailKbWrap'),
+    detailKbId:          document.getElementById('detailKbId'),
+    detailKbCat:         document.getElementById('detailKbCat'),
+    detailKbSev:         document.getElementById('detailKbSev'),
+    detailKbTitle:       document.getElementById('detailKbTitle'),
+    detailKbSolucao:     document.getElementById('detailKbSolucao'),
+    detailCopyBtn:       document.getElementById('detailCopyBtn'),
+    detailMetaFoot:      document.getElementById('detailMetaFoot')
   };
 
   // Modal de novo cliente
@@ -784,6 +858,10 @@
     card.appendChild(icon);
     card.appendChild(body);
     card.appendChild(time);
+
+    // ► Wave 1: clique no card abre drawer de detalhes
+    makeCardInteractive(card, () => openDetailDrawer('log', log));
+
     return card;
   }
 
@@ -853,6 +931,10 @@
     card.appendChild(icon);
     card.appendChild(body);
     card.appendChild(time);
+
+    // ► Wave 1: clique no card abre drawer de detalhes
+    makeCardInteractive(card, () => openDetailDrawer('auth', ev));
+
     return card;
   }
 
@@ -906,7 +988,157 @@
     card.appendChild(avatar);
     card.appendChild(body);
     card.appendChild(timeWrap);
+
+    // ► Wave 1: clique no card abre drawer de detalhes
+    makeCardInteractive(card, () => openDetailDrawer('session', s));
+
     return card;
+  }
+
+  // ─── Wave 1: Helper para tornar um card clicável + acessível ───
+  function makeCardInteractive(card, onActivate) {
+    card.tabIndex = 0;
+    card.setAttribute('role', 'button');
+    card.addEventListener('click', onActivate);
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onActivate();
+      }
+    });
+  }
+
+  // ==========================================================================
+  // 11.b DETAIL DRAWER (Wave 1) — abrir/fechar/popular
+  // ==========================================================================
+  function openDetailDrawer(kind, data) {
+    if (!dom.detailDrawer || !data) return;
+
+    const kbMatch = (kind === 'log') ? findPatternMatch(data.mensagemErro)
+                  : (kind === 'auth') ? findPatternMatch(data.detalhes)
+                  : null;
+
+    state.ui.detailOpen = true;
+    state.ui.detailContext = { kind, data, kbMatch };
+
+    populateDetailDrawer(kind, data, kbMatch);
+
+    dom.detailDrawer.hidden = false;
+    dom.detailDrawer.setAttribute('aria-hidden', 'false');
+    requestAnimationFrame(() => dom.detailDrawer.classList.add('drawer--open'));
+  }
+
+  function closeDetailDrawer() {
+    if (!dom.detailDrawer) return;
+    state.ui.detailOpen = false;
+    state.ui.detailContext = null;
+    dom.detailDrawer.classList.remove('drawer--open');
+    dom.detailDrawer.setAttribute('aria-hidden', 'true');
+    setTimeout(() => { dom.detailDrawer.hidden = true; }, 220);
+  }
+
+  function populateDetailDrawer(kind, data, kbMatch) {
+    // Título + subtítulo
+    const titleMap = { log: 'Detalhe do log', auth: 'Detalhe de autenticação', session: 'Detalhe da sessão' };
+    if (dom.detailDrawerTitle) dom.detailDrawerTitle.textContent = titleMap[kind] || 'Detalhe do evento';
+    if (dom.detailDrawerSubtitle) {
+      dom.detailDrawerSubtitle.textContent = formatAbsoluteTime(data.timestamp || data.inicioSessao || '');
+    }
+
+    // Bloco meta (key/value)
+    if (dom.detailMeta) {
+      dom.detailMeta.innerHTML = '';
+      const rows = [];
+
+      if (kind === 'log') {
+        const sev = String(data.tipoLog || '').toUpperCase();
+        rows.push(['Severidade', buildSevPill(sev)]);
+        rows.push(['Cliente',    getNomeCliente(data.idCliente)]);
+        rows.push(['Aplicativo', data.aplicativo || '—']);
+        rows.push(['Usuário',    data.usuario || '—']);
+        rows.push(['Dispositivo',data.dispositivo || '—']);
+        rows.push(['Timestamp',  formatAbsoluteTime(data.timestamp)]);
+      } else if (kind === 'auth') {
+        const tipo = String(data.tipoEvento || '').toUpperCase();
+        const sevClass = tipo === 'LOGIN_SUCESSO' ? 'success'
+                       : tipo === 'LOGIN_FALHA'   ? 'fail'
+                       : tipo === 'SESSAO_EXPIRADA' ? 'alerta' : 'info';
+        rows.push(['Evento',     buildSevPillRaw(tipo.toLowerCase(), sevClass)]);
+        rows.push(['Cliente',    getNomeCliente(data.idCliente)]);
+        rows.push(['Aplicativo', data.aplicativo || '—']);
+        rows.push(['Usuário',    data.usuario || '—']);
+        rows.push(['Dispositivo',data.dispositivo || '—']);
+        rows.push(['Timestamp',  formatAbsoluteTime(data.timestamp)]);
+      } else {
+        rows.push(['Status',     buildSevPillRaw('online', 'success')]);
+        rows.push(['Cliente',    getNomeCliente(data.idCliente)]);
+        rows.push(['Aplicativo', data.aplicativo || '—']);
+        rows.push(['Usuário',    data.usuario || '—']);
+        rows.push(['Dispositivo',data.dispositivo || '—']);
+        rows.push(['Início',     formatAbsoluteTime(data.inicioSessao)]);
+        rows.push(['Último ping',formatRelativeTime(data.ultimoPing)]);
+        rows.push(['Duração',    formatDuration(data.inicioSessao)]);
+      }
+
+      const frag = document.createDocumentFragment();
+      rows.forEach(([key, val]) => {
+        const k = document.createElement('span');
+        k.className = 'detail-meta__key';
+        k.textContent = key;
+        const v = document.createElement('span');
+        v.className = 'detail-meta__val';
+        if (val instanceof HTMLElement) v.appendChild(val);
+        else v.textContent = val;
+        frag.appendChild(k);
+        frag.appendChild(v);
+      });
+      dom.detailMeta.appendChild(frag);
+    }
+
+    // Mensagem completa
+    if (dom.detailMessage) {
+      const msg = (kind === 'log')    ? (data.mensagemErro || '(sem mensagem)')
+                : (kind === 'auth')   ? (data.detalhes     || '(sem detalhes)')
+                : `Sessão ativa há ${formatDuration(data.inicioSessao)}. Último ping: ${formatRelativeTime(data.ultimoPing)}.`;
+      dom.detailMessage.textContent = msg;
+    }
+
+    // Sugestão da Knowledge Base
+    if (dom.detailKbWrap) {
+      if (kbMatch) {
+        dom.detailKbWrap.hidden = false;
+        if (dom.detailKbId)      dom.detailKbId.textContent = kbMatch.id;
+        if (dom.detailKbCat)     dom.detailKbCat.textContent = kbMatch.categoria;
+        if (dom.detailKbSev) {
+          dom.detailKbSev.textContent = kbMatch.severidade;
+          dom.detailKbSev.className = 'kb-suggestion__sev kb-suggestion__sev--' +
+            kbMatch.severidade.toLowerCase();
+        }
+        if (dom.detailKbTitle)   dom.detailKbTitle.textContent = kbMatch.titulo;
+        if (dom.detailKbSolucao) dom.detailKbSolucao.textContent = kbMatch.solucao;
+      } else {
+        dom.detailKbWrap.hidden = true;
+      }
+    }
+
+    // Rodapé
+    if (dom.detailMetaFoot) {
+      dom.detailMetaFoot.textContent = kbMatch
+        ? `Padrão reconhecido: ${kbMatch.id}`
+        : 'Nenhum padrão da Knowledge Base reconhecido para este evento.';
+    }
+  }
+
+  // Helpers de pílula de severidade dentro do drawer
+  function buildSevPill(sev) {
+    const cls = sev === 'ERRO' ? 'erro' : sev === 'ALERTA' ? 'alerta' : 'info';
+    return buildSevPillRaw(sev.toLowerCase(), cls);
+  }
+  function buildSevPillRaw(label, cls) {
+    const el = document.createElement('span');
+    el.className = 'detail-meta__sev detail-meta__sev--' + cls;
+    el.textContent = label;
+    return el;
   }
 
   // ==========================================================================
@@ -1430,9 +1662,56 @@
       });
     }
 
+    // ─── Wave 1: Detail Drawer (log/auth/session) ────────────────────────
+    if (dom.detailDrawer) {
+      dom.detailDrawer.addEventListener('click', (ev) => {
+        if (ev.target.closest('[data-close]')) closeDetailDrawer();
+      });
+    }
+    if (dom.detailCopyBtn) {
+      dom.detailCopyBtn.addEventListener('click', () => {
+        const ctx = state.ui.detailContext;
+        if (!ctx) return;
+        const payload = {
+          kind: ctx.kind,
+          data: ctx.data,
+          knowledgeBaseMatch: ctx.kbMatch || null
+        };
+        const json = JSON.stringify(payload, null, 2);
+        const flash = (msg) => {
+          const original = dom.detailCopyBtn.querySelector('span');
+          if (!original) return;
+          const prev = original.textContent;
+          original.textContent = msg;
+          setTimeout(() => { original.textContent = prev; }, 1200);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(json).then(
+            () => flash('Copiado ✓'),
+            () => flash('Falhou ✗')
+          );
+        } else {
+          // Fallback: textarea + execCommand
+          const ta = document.createElement('textarea');
+          ta.value = json;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand('copy'); flash('Copiado ✓'); }
+          catch (_) { flash('Falhou ✗'); }
+          document.body.removeChild(ta);
+        }
+      });
+    }
+
     // ─── Atalhos globais ──────────────────────────────────────────────────
     document.addEventListener('keydown', (ev) => {
-      // ESC fecha drawer (precedência sobre outros handlers)
+      // ESC fecha drawers (precedência: detail > capacity)
+      if (ev.key === 'Escape' && state.ui.detailOpen) {
+        closeDetailDrawer();
+        return;
+      }
       if (ev.key === 'Escape' && state.ui.capacityOpen) {
         closeCapacityDrawer();
         return;
