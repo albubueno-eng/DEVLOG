@@ -22,7 +22,7 @@
   // 1. CONFIGURAÇÃO  ← EDITE AQUI
   // ==========================================================================
   const CONFIG = {
-    URL_DO_APPS_SCRIPT: 'https://script.google.com/macros/s/AKfycbx7YBpAS0GwwcvnKA0_2GjbPSYLpFan1XcLjyHkCJl8PZ99U3F5E9-1kyaOPgdTXw1-/exec',
+    URL_DO_APPS_SCRIPT: 'https://script.google.com/macros/s/AKfycbzqjZtyCn7X1lWQBSRYLwW-MijJN53YLPoHJrjjBh5y6P1kTaBATNpAV13KV9OgNYPx/exec',
     API_KEY: 'ee91297b-685b-4ae4-b131-8434841c882e',
 
     // Limite de logs por requisição (alinhado com o MAX_LIMIT do backend)
