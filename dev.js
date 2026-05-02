@@ -167,7 +167,8 @@
       total:    document.getElementById('kpiTotal'),
       erros:    document.getElementById('kpiErros'),
       alertas:  document.getElementById('kpiAlertas'),
-      infos:    document.getElementById('kpiInfos')
+      infos:    document.getElementById('kpiInfos'),
+      mttr:     document.getElementById('kpiMttr') // NOVO SELETOR MTTR
     },
 
     searchInput:      document.getElementById('searchInput'),
@@ -393,6 +394,56 @@
     }
     return r;
   }
+  
+  // [GM-06] Algoritmo de cálculo do MTTR (Mean Time To Resolution)
+  function calcularMTTR(logs) {
+    const resolvidos = logs.filter(l => String(l.status).toUpperCase() === 'RESOLVIDO');
+    if (!resolvidos.length) return null; // Sem dados para calcular média
+
+    let totalMs = 0;
+    let validCount = 0;
+
+    for (const l of resolvidos) {
+      const criadoEm = new Date(l.timestamp).getTime();
+      if (isNaN(criadoEm)) continue;
+
+      // Procura a linha no histórico que fala de "RESOLVIDO"
+      const linhasHist = String(l.historico || '').split('\n');
+      const linhaRes = linhasHist.find(x => x.includes('RESOLVIDO'));
+      if (!linhaRes) continue;
+
+      // Extrai a data do formato: [DD/MM/YYYY, HH:MM:SS] ou [DD/MM/YYYY HH:MM:SS]
+      const match = linhaRes.match(/\[(.*?)\]/);
+      if (match && match[1]) {
+        const strLimpa = match[1].replace(',', ''); // "DD/MM/YYYY HH:MM:SS"
+        const partes = strLimpa.split(' ');
+        if (partes.length >= 2) {
+          const [d, m, y] = partes[0].split('/');
+          const [hora, min, sec] = partes[1].split(':');
+          // Constrói a data isolada
+          const resolvidoEm = new Date(y, m - 1, d, hora, min, sec).getTime();
+          
+          if (!isNaN(resolvidoEm) && resolvidoEm >= criadoEm) {
+            totalMs += (resolvidoEm - criadoEm);
+            validCount++;
+          }
+        }
+      }
+    }
+
+    if (validCount === 0) return null;
+    const mediaMs = totalMs / validCount;
+
+    // Formatação humana do MTTR
+    const minM = Math.floor(mediaMs / 60000);
+    if (minM < 60) return `${minM}m`;
+    const hrM = Math.floor(minM / 60);
+    const restoMin = minM % 60;
+    if (hrM < 24) return restoMin ? `${hrM}h ${restoMin}m` : `${hrM}h`;
+    const diasM = Math.floor(hrM / 24);
+    const restoHr = hrM % 24;
+    return restoHr ? `${diasM}d ${restoHr}h` : `${diasM}d`;
+  }
 
   function contarLogsPorCliente() {
     const map = new Map();
@@ -594,11 +645,16 @@
   }
 
   function renderKPIsLogs() {
-    const kpis = calcularKPIsLogs(getLogsFiltradosCliente());
+    const logsFiltrados = getLogsFiltradosCliente();
+    const kpis = calcularKPIsLogs(logsFiltrados);
     dom.kpi.total.textContent   = formatNumber(kpis.total);
     dom.kpi.erros.textContent   = formatNumber(kpis.erros);
     dom.kpi.alertas.textContent = formatNumber(kpis.alertas);
     dom.kpi.infos.textContent   = formatNumber(kpis.infos);
+    
+    // Calcula e injeta o MTTR
+    const mttr = calcularMTTR(logsFiltrados);
+    dom.kpi.mttr.textContent = mttr ? mttr : 'N/A';
   }
 
   // ==========================================================================
