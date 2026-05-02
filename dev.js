@@ -2034,3 +2034,52 @@ setTimeout(() => {
     setTimeout(() => tampa.remove(), 400); // Remove do código após sumir
   }
 }, 150); // Um atraso minúsculo de 150ms para garantir que o Android piscou o que tinha que piscar
+
+// ============================================================================
+// PAUSE ON HIDDEN — Para todos os timers quando app fica oculto/fechado
+// ============================================================================
+(function setupPauseOnHidden() {
+  let syncTimerPausado = null;
+  
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      // App foi para background ou foi fechado
+      console.log('[Ponto] App oculto — pausando sync e heartbeat');
+      
+      // 1) Pausa o sync de 5 min (limpa qualquer setInterval ativo)
+      if (window._syncIntervalId) {
+        clearInterval(window._syncIntervalId);
+        syncTimerPausado = window._syncIntervalId;
+        window._syncIntervalId = null;
+      }
+      
+      // 2) Pausa o GodModeTracker (heartbeat)
+      if (window.GodModeTracker && typeof GodModeTracker._pauseHeartbeat === 'function') {
+        GodModeTracker._pauseHeartbeat();
+      }
+    } else {
+      // App voltou para foreground
+      console.log('[Ponto] App visível — retomando sync e heartbeat');
+      
+      // Retoma sync se necessário
+      if (syncTimerPausado && !window._syncIntervalId && typeof syncDados === 'function') {
+        window._syncIntervalId = setInterval(syncDados, 5 * 60 * 1000);
+        syncTimerPausado = null;
+      }
+      
+      // Retoma heartbeat
+      if (window.GodModeTracker && typeof GodModeTracker._resumeHeartbeat === 'function') {
+        GodModeTracker._resumeHeartbeat();
+      }
+    }
+  });
+  
+  // Quando aba é fechada de verdade, encerra sessão
+  window.addEventListener('pagehide', () => {
+    if (window._syncIntervalId) {
+      clearInterval(window._syncIntervalId);
+      window._syncIntervalId = null;
+    }
+  });
+})();
+
