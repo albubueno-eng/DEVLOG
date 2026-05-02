@@ -26,8 +26,24 @@
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
   <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png" />
 
-  <!-- Estilo -->
-  <link rel="stylesheet" href="style.css" />
+  <!-- Anti-flash PWA -->
+    <style>
+      html, body {
+        background: #000000;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        opacity: 0;
+        animation: fadeInPWA 0.25s ease-out 0.1s forwards;
+      }
+      @keyframes fadeInPWA {
+        to { opacity: 1; }
+      }
+    </style>
+
+    <!-- Estilo -->
+    <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
