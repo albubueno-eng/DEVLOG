@@ -185,7 +185,7 @@
       </section>
 
       <!-- KPIs de Logs (segunda linha) -->
-      <section class="kpi-grid" aria-label="Indicadores de logs">
+      <section class="kpi-grid" aria-label="Indicadores de logs" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
         <article class="kpi-card">
           <p class="kpi-card__label">Total de Logs</p>
           <p class="kpi-card__value" id="kpiTotal">—</p>
@@ -201,6 +201,11 @@
         <article class="kpi-card kpi-card--info">
           <p class="kpi-card__label">Informativos</p>
           <p class="kpi-card__value" id="kpiInfos">—</p>
+        </article>
+        <!-- [GM-06] NOVO CARD MTTR -->
+        <article class="kpi-card" style="border-top: 3px solid var(--brand-blue);">
+          <p class="kpi-card__label">MTTR (Tempo Médio de Resolução)</p>
+          <p class="kpi-card__value" id="kpiMttr">—</p>
         </article>
       </section>
 
