@@ -137,6 +137,13 @@
             <span>Atualizar</span>
           </button>
         </div>
+        <!-- ============================ AUTH GUARD ============================ -->
+  <script>
+    // Se não tiver token, bloqueia a renderização e expulsa imediatamente
+    if (!localStorage.getItem('gm_token')) {
+      window.location.replace('./login.html');
+    }
+  </script>
       </header>
 
       <!-- KPIs Operacionais (primeira linha — telemetria comportamental) -->
