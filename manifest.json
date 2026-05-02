@@ -1,20 +1,32 @@
 {
-  "name": "God Mode - Central Dev",
+  "name": "God Mode - Central de Desenvolvedor",
   "short_name": "God Mode",
+  "description": "Painel de telemetria e observabilidade multi-tenant",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#0f172a",
+  "orientation": "any",
+  "background_color": "#0B1B33",
+  "theme_color": "#0B1B33",
+  "categories": ["productivity", "developer"],
   "icons": [
     {
-      "src": "https://i.postimg.cc/gJzsbnLJ/logo-v2-png.png",
+      "src": "icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "https://i.postimg.cc/gJzsbnLJ/logo-v2-png.png",
+      "src": "icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
