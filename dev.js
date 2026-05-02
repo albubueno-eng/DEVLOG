@@ -1958,7 +1958,7 @@
     }, 30000);
   }
 
-  // ==========================================================================
+   // ==========================================================================
   // 21. ORCHESTRATION
   // ==========================================================================
   async function loadData() {
@@ -2000,87 +2000,45 @@
     loadData();
     startAutoRefresh();
     startLocalTick();
+
+    // Boot da UI: cortina + service worker
+    bootUIChrome();
+    registerServiceWorker();
   }
 
+  // ==========================================================================
+  // 22. UI CHROME BOOTSTRAP — Remoção da cortina de carregamento
+  // ==========================================================================
+  function bootUIChrome() {
+    document.body.classList.add('pronto');
+    setTimeout(() => {
+      const tampa = document.getElementById('tampa-carregamento');
+      if (tampa) {
+        tampa.style.opacity = '0';
+        setTimeout(() => tampa.remove(), 400);
+      }
+    }, 150);
+  }
+
+  // ==========================================================================
+  // 23. PWA — Service Worker registration
+  // ==========================================================================
+  function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js', { scope: './' })
+        .then(reg => console.log('[GodMode] Service Worker registrado:', reg.scope))
+        .catch(err => console.warn('[GodMode] Service Worker falhou:', err));
+    });
+  }
+
+  // ==========================================================================
+  // 24. ENTRY POINT
+  // ==========================================================================
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
     init();
   }
-  // ==========================================================================
-// 22. PWA — Service Worker registration
-// ==========================================================================
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js', { scope: './' })
-      .then(reg => {
-        console.log('[GodMode] Service Worker registrado:', reg.scope);
-      })
-      .catch(err => {
-        console.warn('[GodMode] Service Worker falhou:', err);
-      });
-  });
-}
-  // Abre a cortina suavemente sem piscar
-document.body.classList.add('pronto');
-
-// Remove a tampa de carregamento suavemente após tudo estar no lugar
-setTimeout(() => {
-  const tampa = document.getElementById('tampa-carregamento');
-  if (tampa) {
-    tampa.style.opacity = '0';
-    setTimeout(() => tampa.remove(), 400); // Remove do código após sumir
-  }
-}, 150); // Um atraso minúsculo de 150ms para garantir que o Android piscou o que tinha que piscar
-
-// ============================================================================
-// PAUSE ON HIDDEN — Para todos os timers quando app fica oculto/fechado
-// ============================================================================
-(function setupPauseOnHidden() {
-  let syncTimerPausado = null;
-  
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      // App foi para background ou foi fechado
-      console.log('[Ponto] App oculto — pausando sync e heartbeat');
-      
-      // 1) Pausa o sync de 5 min (limpa qualquer setInterval ativo)
-      if (window._syncIntervalId) {
-        clearInterval(window._syncIntervalId);
-        syncTimerPausado = window._syncIntervalId;
-        window._syncIntervalId = null;
-      }
-      
-      // 2) Pausa o GodModeTracker (heartbeat)
-      if (window.GodModeTracker && typeof GodModeTracker._pauseHeartbeat === 'function') {
-        GodModeTracker._pauseHeartbeat();
-      }
-    } else {
-      // App voltou para foreground
-      console.log('[Ponto] App visível — retomando sync e heartbeat');
-      
-      // Retoma sync se necessário
-      if (syncTimerPausado && !window._syncIntervalId && typeof syncDados === 'function') {
-       window._syncIntervalId = setInterval(syncDados, 5 * 60 * 1000);
-        syncTimerPausado = null;
-      }
-      
-      // Retoma heartbeat
-      if (window.GodModeTracker && typeof GodModeTracker._resumeHeartbeat === 'function') {
-        GodModeTracker._resumeHeartbeat();
-      }
-    }
-  });
-  
-  // Quando aba é fechada de verdade, encerra sessão
-  window.addEventListener('pagehide', () => {
-    if (window._syncIntervalId) {
-      clearInterval(window._syncIntervalId);
-      window._syncIntervalId = null;
-    }
-  });
-})();
-
 
 })();
-
