@@ -2,15 +2,34 @@
 <html lang="pt-BR" data-theme="light">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#0B1B33" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+
   <title>Central de Desenvolvedor — God Mode</title>
+
+  <!-- PWA: cor da barra de status -->
+  <meta name="theme-color" content="#0B1B33" />
+
+  <!-- PWA: manifest -->
+  <link rel="manifest" href="manifest.json" />
+
+  <!-- iOS: tratamento como app nativo -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="God Mode" />
+
+  <!-- iOS: ícone de instalação (iOS ignora o manifest, precisa separado) -->
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png" />
+  <link rel="apple-touch-icon" sizes="512x512" href="icon-512.png" />
+
+  <!-- Favicon (browser desktop) -->
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png" />
+
+  <!-- Estilo -->
   <link rel="stylesheet" href="style.css" />
-  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#0f172a"> <link rel="manifest" href="manifest.json">
 </head>
+
 <body>
 
   <!-- Backdrop com gradiente + blobs de luz (profundidade premium) -->
