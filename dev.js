@@ -2021,9 +2021,7 @@ if ('serviceWorker' in navigator) {
       });
   });
 }
-})();
-
-// Abre a cortina suavemente sem piscar
+  // Abre a cortina suavemente sem piscar
 document.body.classList.add('pronto');
 
 // Remove a tampa de carregamento suavemente após tudo estar no lugar
@@ -2081,5 +2079,8 @@ setTimeout(() => {
       window._syncIntervalId = null;
     }
   });
+})();
+
+
 })();
 
