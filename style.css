@@ -2175,4 +2175,13 @@ input, textarea, select { font-family: inherit; color: inherit; }
   #exportCsvBtn span { display: none; } /* mantém só ícone no mobile */
 }
 
+/* Esconde tudo no primeiro milissegundo */
+body {
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+}
 
+/* O JS vai adicionar essa classe quando estiver tudo pronto */
+body.pronto {
+  opacity: 1;
+}
