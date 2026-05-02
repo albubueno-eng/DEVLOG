@@ -2063,7 +2063,7 @@ setTimeout(() => {
       
       // Retoma sync se necessário
       if (syncTimerPausado && !window._syncIntervalId && typeof syncDados === 'function') {
-        window._syncIntervalId = setInterval(syncDados, 5 * 60 * 1000);
+       window._syncIntervalId = setInterval(syncDados, 5 * 60 * 1000);
         syncTimerPausado = null;
       }
       
