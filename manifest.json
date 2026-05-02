@@ -15,7 +15,7 @@
       "src": "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cdefs%3E%3ClinearGradient id='bg' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%231c1c1e'/%3E%3Cstop offset='100%25' stop-color='%23000000'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='512' height='512' fill='url(%23bg)'/%3E%3Cpath d='M160 190 L240 256 L160 322' fill='none' stroke='%230a84ff' stroke-width='42' stroke-linecap='round' stroke-linejoin='round'/%3E%3Crect x='270' y='301' width='92' height='42' rx='12' fill='%230a84ff'/%3E%3C/svg%3E",
       "sizes": "512x512",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "image/png"
     }
   ]
 }
