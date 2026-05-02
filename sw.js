@@ -1,6 +1,6 @@
 // sw.js - Motor do PWA (Focado em Performance e Atualização em Tempo Real)
 
-const CACHE_NAME = 'god-mode-v2.1';
+const CACHE_NAME = 'god-mode-v2.3';
 
 // Força o Service Worker a instalar imediatamente
 self.addEventListener('install', (event) => {
