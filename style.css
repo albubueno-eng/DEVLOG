@@ -2185,3 +2185,46 @@ body {
 body.pronto {
   opacity: 1;
 }
+
+/* ============================================================================
+   FIX MOBILE — Barra de pesquisa estava esticando vertical no celular
+   ============================================================================ */
+@media (max-width: 600px) {
+  .search-field {
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: 100%;
+    min-height: 40px;
+    height: 40px;
+    align-items: center;
+  }
+  .search-field__input {
+    height: 38px;
+    line-height: 38px;
+    padding: 0 var(--sp-3) 0 var(--sp-2);
+  }
+  .search-field__icon {
+    margin-left: var(--sp-3);
+    flex-shrink: 0;
+  }
+  .search-field__clear {
+    margin-right: 6px;
+    flex-shrink: 0;
+  }
+
+  /* Toolbar empilhada no mobile, evitando que itens estiquem */
+  .events-section__row--toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--sp-2);
+  }
+  .severity-pills {
+    width: 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  #exportCsvBtn {
+    align-self: flex-end;
+  }
+}
