@@ -1,22 +1,10 @@
 /**
  * ============================================================================
- *  CENTRAL DE DESENVOLVEDOR — MOTOR LÓGICO (God Mode) v2
- *  Vanilla JS ES6+ | Zero dependências
+ *  CENTRAL DE DESENVOLVEDOR — MOTOR LÓGICO (God Mode) v2.1
+ *  Vanilla JS ES6+ | Zero dependências | Auth Guard | Multitenant
  *  ----------------------------------------------------------------------------
  *  Arquitetura:
  *    [API] → [State] → [Render Dispatcher] ← [Events]
- *
- *  Estado consumido:
- *    - clientes, logs, eventosAuth, sessoesAtivas, saudeApps
- *    - totais (KPIs de logs), operacionais (KPIs comportamentais)
- *    - ui: search, severity{ERRO,ALERTA,INFO}, theme, capacityOpen
- *
- *  Princípios:
- *    - Single source of truth
- *    - Render idempotente por tab
- *    - Auto-refresh visibility-aware
- *    - DOM seguro (textContent / DocumentFragment)
- *    - Filtros compostos in-memory (zero fetch extra)
  * ============================================================================
  */
 
@@ -24,10 +12,24 @@
   'use strict';
 
   // ==========================================================================
+  // 0. AUTH GUARD & SESSION MANAGER (GM-03)
+  // ==========================================================================
+  const gmToken = localStorage.getItem('gm_token');
+  const gmUser = localStorage.getItem('gm_user');
+  const gmEscopo = localStorage.getItem('gm_escopo') || '*'; // '*' = admin master
+
+  // Proteção da porta: Sem token, sem acesso.
+  if (!gmToken) {
+    window.location.replace('./login.html');
+    return; 
+  }
+
+  // ==========================================================================
   // 1. CONFIGURAÇÃO
   // ==========================================================================
   const CONFIG = {
-    URL_DO_APPS_SCRIPT: 'https://script.google.com/macros/s/AKfycbzqjZtyCn7X1lWQBSRYLwW-MijJN53YLPoHJrjjBh5y6P1kTaBATNpAV13KV9OgNYPx/exec',
+    // ⚠️ ATENÇÃO: Substitua pela URL real de Deploy do seu Apps Script
+    URL_DO_APPS_SCRIPT: 'SUA_URL_AQUI',
     API_KEY: 'ee91297b-685b-4ae4-b131-8434841c882e',
 
     LIMIT: 500,
@@ -45,33 +47,32 @@
     logs: [],
     eventosAuth: [],
     sessoesAtivas: [],
-    saudeApps: [],                 // ← NOVO: array de apps monitorados (Capacity)
+    saudeApps: [],
     totais: null,
     operacionais: null,
     filtroClienteId: '',
-    activeTab: 'logs',             // 'logs' | 'auth' | 'sessions'
+    activeTab: 'logs',
     isLoading: false,
     error: null,
     geradoEm: null,
 
-    // ─── UI sub-state (só client-side, não vem do backend) ──────────────────
+    // ─── UI sub-state ───────────────────────────────────────────────────────
     ui: {
-      search: '',                  // string normalizada (lowercase, trim)
-      severity: {                  // toggle de gravidade (tab Logs)
+      search: '',
+      severity: {
         ERRO:    true,
         ALERTA:  true,
         INFO:    true
       },
-      theme: 'light',              // 'light' | 'dark'
-      capacityOpen: false,         // drawer Capacity Monitor aberto?
-      detailOpen: false,           // drawer Detalhe do evento aberto?
-      detailContext: null          // { kind:'log'|'auth'|'session', data:{}, kbMatch:{} }
+      theme: 'light',
+      capacityOpen: false,
+      detailOpen: false,
+      detailContext: null
     }
   };
 
   // ==========================================================================
   // 2.b KNOWLEDGE BASE — 40 padrões (espelhada do backend para matching local)
-  //     Mantida embutida para diagnóstico INSTANTÂNEO (zero round-trip).
   // ==========================================================================
   const KB_PATTERNS = [
     { id:'sh-001', categoria:'sheets', regex:/Service invoked too many times/i,         titulo:'Quota de execuções esgotada',       severidade:'ERRO',   solucao:'Implementar batch + cache; reduzir frequência de gravações.' },
@@ -116,7 +117,6 @@
     { id:'rt-008', categoria:'device', regex:/Maximum call stack|stack overflow/i,      titulo:'Stack overflow',                    severidade:'ERRO',   solucao:'Trocar recursão por iteração; checar caso-base.' }
   ];
 
-  // Encontra o PRIMEIRO padrão que casa com o texto. Retorna null se nenhum.
   function findPatternMatch(text) {
     if (!text) return null;
     const s = String(text);
@@ -130,6 +130,10 @@
   // 3. SELETORES DOM
   // ==========================================================================
   const dom = {
+    // Topbar Auth
+    loggedUserDisplay: document.getElementById('loggedUserDisplay'),
+    logoutBtn:         document.getElementById('logoutBtn'),
+
     clientList:       document.getElementById('clientList'),
     logsList:         document.getElementById('logsList'),
     logsMeta:         document.getElementById('logsMeta'),
@@ -166,7 +170,6 @@
       infos:    document.getElementById('kpiInfos')
     },
 
-    // ─── NOVO: Toolbar de eventos (search + pills + export) ────────────────
     searchInput:      document.getElementById('searchInput'),
     searchClearBtn:   document.getElementById('searchClearBtn'),
     severityPills:    document.getElementById('severityPills'),
@@ -174,11 +177,8 @@
     pillCountAlerta:  document.getElementById('pillCountAlerta'),
     pillCountInfo:    document.getElementById('pillCountInfo'),
     exportCsvBtn:     document.getElementById('exportCsvBtn'),
-
-    // ─── NOVO: Theme toggle ────────────────────────────────────────────────
     themeToggleBtn:   document.getElementById('themeToggleBtn'),
 
-    // ─── NOVO: Capacity Drawer ─────────────────────────────────────────────
     capacityBtn:      document.getElementById('capacityBtn'),
     capacityBadge:    document.getElementById('capacityBadge'),
     capacityDrawer:   document.getElementById('capacityDrawer'),
@@ -187,7 +187,6 @@
     capacityList:     document.getElementById('capacityList'),
     capacityMeta:     document.getElementById('capacityMeta'),
 
-    // ─── NOVO Wave 1: Detail Drawer (log/auth/session) ─────────────────────
     detailDrawer:        document.getElementById('detailDrawer'),
     detailDrawerTitle:   document.getElementById('detailDrawerTitle'),
     detailDrawerSubtitle:document.getElementById('detailDrawerSubtitle'),
@@ -203,7 +202,6 @@
     detailMetaFoot:      document.getElementById('detailMetaFoot')
   };
 
-  // Modal de novo cliente
   const modal = {
     root:      document.getElementById('clientModal'),
     form:      document.getElementById('clientForm'),
@@ -215,11 +213,15 @@
     openBtn:   document.getElementById('newClientBtn')
   };
 
+  // Preenche o nome do usuário assim que possível
+  if (dom.loggedUserDisplay) dom.loggedUserDisplay.textContent = gmUser || 'Admin';
+
   // ==========================================================================
   // 4. API LAYER
   // ==========================================================================
   async function fetchDashboardData() {
-    const url = `${CONFIG.URL_DO_APPS_SCRIPT}?apiKey=${encodeURIComponent(CONFIG.API_KEY)}&limit=${CONFIG.LIMIT}`;
+    // GM-03: Passa o escopo do usuário para garantir isolamento de dados
+    const url = `${CONFIG.URL_DO_APPS_SCRIPT}?apiKey=${encodeURIComponent(CONFIG.API_KEY)}&limit=${CONFIG.LIMIT}&idClienteVinculado=${encodeURIComponent(gmEscopo)}`;
 
     const ctrl = new AbortController();
     const timeoutId = setTimeout(() => ctrl.abort(), CONFIG.FETCH_TIMEOUT_MS);
@@ -249,12 +251,19 @@
     let json;
     try { json = JSON.parse(raw); }
     catch {
-      console.error('[GodMode] Resposta não-JSON:', raw.slice(0, 300));
       if (raw.includes('<!DOCTYPE') || raw.includes('accounts.google.com')) {
         throw new Error('Apps Script exigiu login. Reimplante como "Qualquer pessoa".');
       }
       throw new Error('Resposta inválida do servidor.');
     }
+    
+    // GM-03: Se token inválido, desloga forçado
+    if (json.error === 'Sessão inválida ou expirada') {
+      localStorage.clear();
+      window.location.replace('./login.html');
+      return;
+    }
+
     if (!json.ok) throw new Error(json.error || 'Resposta inválida do servidor');
     return json.data;
   }
@@ -267,12 +276,20 @@
       cache: 'no-store',
       redirect: 'follow',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ apiKey: CONFIG.API_KEY, action, ...payload })
+      // GM-03: Injeção do token em todas as operações de escrita
+      body: JSON.stringify({ apiKey: CONFIG.API_KEY, token: gmToken, action, ...payload })
     });
     const raw = await resp.text();
     let json;
     try { json = JSON.parse(raw); }
     catch { throw new Error('Resposta inválida do servidor'); }
+
+    if (json.error === 'Sessão inválida ou expirada') {
+      localStorage.clear();
+      window.location.replace('./login.html');
+      return;
+    }
+
     if (!json.ok) throw new Error(json.error || 'Falha na operação');
     return json.data;
   }
@@ -296,10 +313,10 @@
     state.logs          = Array.isArray(data.logs)          ? data.logs          : [];
     state.eventosAuth   = Array.isArray(data.eventosAuth)   ? data.eventosAuth   : [];
     state.sessoesAtivas = Array.isArray(data.sessoesAtivas) ? data.sessoesAtivas : [];
-    state.saudeApps     = Array.isArray(data.saudeApps)     ? data.saudeApps     : []; // ← NOVO
-    state.totais        = data.totais       || null;
+    state.saudeApps     = Array.isArray(data.saudeApps)     ? data.saudeApps     : [];
+    state.totais        = data.totais        || null;
     state.operacionais  = data.operacionais || null;
-    state.geradoEm      = data.geradoEm     || new Date().toISOString();
+    state.geradoEm      = data.geradoEm      || new Date().toISOString();
     state.error         = null;
   }
 
@@ -315,10 +332,9 @@
     renderTabs();
     renderToolbarVisibility();
     renderEventsList();
-    renderHeader();              // atualiza meta de contagem
+    renderHeader();              
   }
 
-  // Mutações de UI ────────────────────────────────────────────────────────
   function setSearch(query) {
     const norm = String(query || '').toLowerCase().trim();
     if (norm === state.ui.search) return;
@@ -367,7 +383,6 @@
     return state.sessoesAtivas.filter(s => String(s.idCliente) === String(state.filtroClienteId));
   }
 
-  // KPIs SEMPRE consideram apenas o filtro de cliente (não search/severity)
   function calcularKPIsLogs(logs) {
     const r = { total: logs.length, erros: 0, alertas: 0, infos: 0 };
     for (const l of logs) {
@@ -394,17 +409,15 @@
     return c ? c.nomeCliente : id;
   }
 
-  // ─── Pipeline de filtro composto ────────────────────────────────────────
-  // Ordem: cliente → severidade (só logs) → search (todos)
   function applySeverityFilter(logs) {
     const sev = state.ui.severity;
-    if (sev.ERRO && sev.ALERTA && sev.INFO) return logs; // tudo ligado: passthrough
+    if (sev.ERRO && sev.ALERTA && sev.INFO) return logs; 
     return logs.filter(l => {
       const t = String(l.tipoLog || '').toUpperCase();
       if (t === 'ERRO')   return sev.ERRO;
       if (t === 'ALERTA') return sev.ALERTA;
       if (t === 'INFO')   return sev.INFO;
-      return true; // tipo desconhecido sempre passa
+      return true; 
     });
   }
 
@@ -431,7 +444,6 @@
         contains(getNomeCliente(a.idCliente), q)
       );
     }
-    // sessions
     return items.filter(s =>
       contains(s.aplicativo, q) ||
       contains(s.usuario, q) ||
@@ -445,7 +457,6 @@
     return String(field).toLowerCase().includes(q);
   }
 
-  // Resultado final que vai pra UI (lista renderizada)
   function getEventsForActiveTab() {
     if (state.activeTab === 'auth') {
       return applySearchFilter(getAuthFiltradosCliente(), 'auth');
@@ -453,13 +464,11 @@
     if (state.activeTab === 'sessions') {
       return applySearchFilter(getSessoesFiltradasCliente(), 'sessions');
     }
-    // logs: pipeline completo
     const c = getLogsFiltradosCliente();
     const s = applySeverityFilter(c);
     return applySearchFilter(s, 'logs');
   }
 
-  // Capacity helpers
   const CAP_STATUS_ORDER = ['CRITICO', 'ALERTA', 'ATENCAO', 'OFFLINE', 'PENDING', 'SAUDAVEL', 'MIGRADO'];
   function contarSaudePorStatus() {
     const map = { SAUDAVEL: 0, ATENCAO: 0, ALERTA: 0, CRITICO: 0, OFFLINE: 0, MIGRADO: 0, PENDING: 0 };
@@ -471,7 +480,6 @@
     return map;
   }
   function contarSaudeAlertas() {
-    // o que "merece" o badge no botão da topbar
     let n = 0;
     for (const a of state.saudeApps) {
       const st = String(a.status || '').toUpperCase();
@@ -480,7 +488,7 @@
     return n;
   }
 
-  // ==========================================================================
+ // ==========================================================================
   // 7. RENDER LAYER — Sidebar
   // ==========================================================================
   function renderSidebar() {
@@ -550,7 +558,7 @@
     renderSearchClearVisibility();
     renderEventsList();
     renderCapacityBadge();
-    if (state.ui.capacityOpen) renderCapacityDrawer(); // re-render quando dados mudam
+    if (state.ui.capacityOpen) renderCapacityDrawer();
   }
 
   function renderHeader() {
@@ -577,7 +585,6 @@
     return false;
   }
 
-  // KPIs operacionais (sempre globais — não respeitam filtro de cliente)
   function renderKPIsOps() {
     const ops = state.operacionais || {};
     dom.kpiOps.online.textContent    = formatNumber(ops.onlineAgora);
@@ -586,7 +593,6 @@
     dom.kpiOps.expiradas.textContent = formatNumber(ops.sessoesExpiradasHoje);
   }
 
-  // KPIs de logs (respeitam apenas filtro de cliente, NÃO search/severity)
   function renderKPIsLogs() {
     const kpis = calcularKPIsLogs(getLogsFiltradosCliente());
     dom.kpi.total.textContent   = formatNumber(kpis.total);
@@ -657,7 +663,6 @@
   // 10. RENDER LAYER — Tabs + Toolbar
   // ==========================================================================
   function renderTabs() {
-    // Counts da tab refletem APENAS o filtro de cliente (consistência visual)
     const counts = {
       logs:     getLogsFiltradosCliente().length,
       auth:     getAuthFiltradosCliente().length,
@@ -675,7 +680,6 @@
     });
   }
 
-  // Mostra/esconde os pills de severidade (só fazem sentido na tab Logs)
   function renderToolbarVisibility() {
     if (!dom.severityPills) return;
     const showPills = state.activeTab === 'logs';
@@ -692,7 +696,6 @@
 
   function renderSeverityPills() {
     if (!dom.severityPills) return;
-    // counts respeitam o filtro de cliente atual
     const logs = getLogsFiltradosCliente();
     const counts = { ERRO: 0, ALERTA: 0, INFO: 0 };
     for (const l of logs) {
@@ -836,6 +839,21 @@
     head.appendChild(app);
     head.appendChild(client);
 
+    // GM-04: Badge de Status no Card
+    const statusLog = String(log.status || 'ABERTO').toUpperCase();
+    if (statusLog !== 'ABERTO') {
+      const badgeStatus = document.createElement('span');
+      badgeStatus.style.marginLeft = '8px';
+      badgeStatus.style.padding = '2px 6px';
+      badgeStatus.style.borderRadius = '4px';
+      badgeStatus.style.fontSize = '10px';
+      badgeStatus.style.fontWeight = 'bold';
+      badgeStatus.style.backgroundColor = statusLog === 'RESOLVIDO' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.1)';
+      badgeStatus.style.color = statusLog === 'RESOLVIDO' ? '#10B981' : '#94A3B8';
+      badgeStatus.textContent = statusLog;
+      head.appendChild(badgeStatus);
+    }
+
     const message = document.createElement('pre');
     message.className = 'log-card__message';
     message.textContent = log.mensagemErro || '(sem mensagem)';
@@ -859,7 +877,6 @@
     card.appendChild(body);
     card.appendChild(time);
 
-    // ► Wave 1: clique no card abre drawer de detalhes
     makeCardInteractive(card, () => openDetailDrawer('log', log));
 
     return card;
@@ -932,7 +949,6 @@
     card.appendChild(body);
     card.appendChild(time);
 
-    // ► Wave 1: clique no card abre drawer de detalhes
     makeCardInteractive(card, () => openDetailDrawer('auth', ev));
 
     return card;
@@ -989,13 +1005,11 @@
     card.appendChild(body);
     card.appendChild(timeWrap);
 
-    // ► Wave 1: clique no card abre drawer de detalhes
     makeCardInteractive(card, () => openDetailDrawer('session', s));
 
     return card;
   }
 
-  // ─── Wave 1: Helper para tornar um card clicável + acessível ───
   function makeCardInteractive(card, onActivate) {
     card.tabIndex = 0;
     card.setAttribute('role', 'button');
@@ -1037,15 +1051,37 @@
     setTimeout(() => { dom.detailDrawer.hidden = true; }, 220);
   }
 
+  // GM-04: Action principal de resolução
+  async function actionResolverLog(logData) {
+    const resolucao = prompt('Solução aplicada (opcional):', '');
+    if (resolucao === null) return; // Cancelou
+
+    try {
+      setLoading(true);
+      await apiPost('updatelogstatus', {
+        rowIdx: logData._rowIdx,
+        novoStatus: 'RESOLVIDO',
+        resolucao: resolucao.trim()
+      });
+      closeDetailDrawer();
+      await loadData();
+    } catch (err) {
+      alert(`Falha ao resolver: ${err.message}`);
+      setLoading(false);
+    }
+  }
+
   function populateDetailDrawer(kind, data, kbMatch) {
-    // Título + subtítulo
     const titleMap = { log: 'Detalhe do log', auth: 'Detalhe de autenticação', session: 'Detalhe da sessão' };
     if (dom.detailDrawerTitle) dom.detailDrawerTitle.textContent = titleMap[kind] || 'Detalhe do evento';
     if (dom.detailDrawerSubtitle) {
       dom.detailDrawerSubtitle.textContent = formatAbsoluteTime(data.timestamp || data.inicioSessao || '');
     }
 
-    // Bloco meta (key/value)
+    // GM-04: Limpar botões injetados anteriormente
+    const btnAntigo = document.getElementById('gm-resolve-btn');
+    if (btnAntigo) btnAntigo.remove();
+
     if (dom.detailMeta) {
       dom.detailMeta.innerHTML = '';
       const rows = [];
@@ -1053,11 +1089,30 @@
       if (kind === 'log') {
         const sev = String(data.tipoLog || '').toUpperCase();
         rows.push(['Severidade', buildSevPill(sev)]);
+        
+        // GM-04: Dados de Resolução no Drawer
+        const sts = String(data.status || 'ABERTO').toUpperCase();
+        rows.push(['Status', sts === 'RESOLVIDO' ? buildSevPillRaw(sts, 'success') : buildSevPillRaw(sts, 'alerta')]);
+        if (data.resolvidoPor) rows.push(['Resolvido por', data.resolvidoPor]);
+        if (data.resolucao) rows.push(['Resolução', data.resolucao]);
+
         rows.push(['Cliente',    getNomeCliente(data.idCliente)]);
         rows.push(['Aplicativo', data.aplicativo || '—']);
         rows.push(['Usuário',    data.usuario || '—']);
         rows.push(['Dispositivo',data.dispositivo || '—']);
         rows.push(['Timestamp',  formatAbsoluteTime(data.timestamp)]);
+
+        // GM-04: Injeta botão de resolver dinamicamente no rodapé se estiver ABERTO e se tiver _rowIdx
+        if (sts !== 'RESOLVIDO' && data._rowIdx && dom.detailCopyBtn) {
+          const btn = document.createElement('button');
+          btn.id = 'gm-resolve-btn';
+          btn.className = 'btn btn--primary btn--sm';
+          btn.style.marginLeft = 'auto'; // empurra para direita
+          btn.textContent = 'Marcar Resolvido';
+          btn.onclick = () => actionResolverLog(data);
+          dom.detailCopyBtn.parentElement.appendChild(btn);
+        }
+
       } else if (kind === 'auth') {
         const tipo = String(data.tipoEvento || '').toUpperCase();
         const sevClass = tipo === 'LOGIN_SUCESSO' ? 'success'
@@ -1095,7 +1150,6 @@
       dom.detailMeta.appendChild(frag);
     }
 
-    // Mensagem completa
     if (dom.detailMessage) {
       const msg = (kind === 'log')    ? (data.mensagemErro || '(sem mensagem)')
                 : (kind === 'auth')   ? (data.detalhes     || '(sem detalhes)')
@@ -1103,7 +1157,6 @@
       dom.detailMessage.textContent = msg;
     }
 
-    // Sugestão da Knowledge Base
     if (dom.detailKbWrap) {
       if (kbMatch) {
         dom.detailKbWrap.hidden = false;
@@ -1121,7 +1174,6 @@
       }
     }
 
-    // Rodapé
     if (dom.detailMetaFoot) {
       dom.detailMetaFoot.textContent = kbMatch
         ? `Padrão reconhecido: ${kbMatch.id}`
@@ -1129,7 +1181,6 @@
     }
   }
 
-  // Helpers de pílula de severidade dentro do drawer
   function buildSevPill(sev) {
     const cls = sev === 'ERRO' ? 'erro' : sev === 'ALERTA' ? 'alerta' : 'info';
     return buildSevPillRaw(sev.toLowerCase(), cls);
@@ -1223,10 +1274,9 @@
   }
 
   // ==========================================================================
-  // 14. THEME TOGGLE — Light/Dark via [data-theme] + localStorage
+  // 14. THEME TOGGLE
   // ==========================================================================
   function detectInitialTheme() {
-    // Prioridade: localStorage → atributo HTML atual → preferência do SO → light
     try {
       const stored = localStorage.getItem(CONFIG.LS_THEME_KEY);
       if (stored === 'light' || stored === 'dark') return stored;
@@ -1255,7 +1305,7 @@
   }
 
   // ==========================================================================
-  // 15. EXPORT CSV — Dados filtrados → Blob download (RFC 4180)
+  // 15. EXPORT CSV
   // ==========================================================================
   const CSV_HEADERS = {
     logs:     ['timestamp', 'tipoLog', 'idCliente', 'cliente', 'aplicativo', 'usuario', 'dispositivo', 'mensagemErro'],
@@ -1279,7 +1329,6 @@
       lines.push(row.join(','));
     }
 
-    // BOM UTF-8 para Excel reconhecer acentos
     const csv = '\uFEFF' + lines.join('\r\n') + '\r\n';
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url  = URL.createObjectURL(blob);
@@ -1302,7 +1351,6 @@
   function csvEscape(value) {
     if (value === null || value === undefined) return '';
     const s = String(value);
-    // RFC 4180: campos com vírgula, aspas ou quebra de linha precisam de aspas duplas
     if (/[",\r\n]/.test(s)) {
       return '"' + s.replace(/"/g, '""') + '"';
     }
@@ -1337,7 +1385,7 @@
   }
 
   // ==========================================================================
-  // 16. CAPACITY DRAWER — Visualização de saudeApps[]
+  // 16. CAPACITY DRAWER
   // ==========================================================================
   function openCapacityDrawer()  { setCapacityOpen(true); }
   function closeCapacityDrawer() { setCapacityOpen(false); }
@@ -1366,7 +1414,6 @@
     dom.capacityDrawer.hidden = false;
     dom.capacityDrawer.setAttribute('aria-hidden', 'false');
 
-    // Subtitle
     if (dom.capacityDrawerSubtitle) {
       const total = state.saudeApps.length;
       dom.capacityDrawerSubtitle.textContent = total
@@ -1429,7 +1476,6 @@
       return;
     }
 
-    // Ordena: piores status primeiro, depois maior % de uso
     const sorted = [...state.saudeApps].sort((a, b) => {
       const sa = CAP_STATUS_ORDER.indexOf(String(a.status || 'PENDING').toUpperCase());
       const sb = CAP_STATUS_ORDER.indexOf(String(b.status || 'PENDING').toUpperCase());
@@ -1468,7 +1514,6 @@
     card.dataset.status = status;
     card.setAttribute('role', 'listitem');
 
-    // Head
     const head = document.createElement('div');
     head.className = 'cap-card__head';
     const heading = document.createElement('div');
@@ -1488,7 +1533,6 @@
     head.appendChild(tag);
     card.appendChild(head);
 
-    // Smart progress bar (só faz sentido se há capacidade reportada)
     if (Number.isFinite(pct)) {
       const bar = document.createElement('div');
       bar.className = 'cap-bar';
@@ -1505,7 +1549,6 @@
       card.appendChild(bar);
     }
 
-    // Métricas
     const metrics = document.createElement('div');
     metrics.className = 'cap-card__metrics';
 
@@ -1531,7 +1574,6 @@
 
     if (metrics.children.length) card.appendChild(metrics);
 
-    // Nota explicativa quando não há capacity reportada
     if (!Number.isFinite(pct) && status === 'PENDING') {
       const note = document.createElement('p');
       note.className = 'cap-card__note';
@@ -1589,7 +1631,16 @@
   // 17. EVENTS
   // ==========================================================================
   function bindEvents() {
-    // ─── Filtro de cliente (sidebar) ──────────────────────────────────────
+    
+    // GM-03: LOGOUT BUTTON ────────────────────────────────────────────────
+    if (dom.logoutBtn) {
+      dom.logoutBtn.addEventListener('click', async () => {
+        try { await apiPost('logoutgodmode', {}); } catch(e) {}
+        localStorage.clear();
+        window.location.replace('./login.html');
+      });
+    }
+
     dom.clientList.addEventListener('click', (ev) => {
       const btn = ev.target.closest('.client-item');
       if (!btn) return;
@@ -1607,21 +1658,18 @@
       if (next) next.focus();
     });
 
-    // ─── Tabs ─────────────────────────────────────────────────────────────
     dom.eventTabs.addEventListener('click', (ev) => {
       const btn = ev.target.closest('.tab');
       if (!btn) return;
       setActiveTab(btn.dataset.tab);
     });
 
-    // ─── Refresh ──────────────────────────────────────────────────────────
     dom.refreshBtn.addEventListener('click', loadData);
 
-    // ─── Search (debounced) ───────────────────────────────────────────────
     if (dom.searchInput) {
       const debounced = debounce((val) => setSearch(val), CONFIG.SEARCH_DEBOUNCE_MS);
       dom.searchInput.addEventListener('input', (ev) => debounced(ev.target.value));
-      dom.searchInput.addEventListener('search', (ev) => setSearch(ev.target.value)); // X nativo do input[type=search]
+      dom.searchInput.addEventListener('search', (ev) => setSearch(ev.target.value)); 
     }
     if (dom.searchClearBtn) {
       dom.searchClearBtn.addEventListener('click', () => {
@@ -1631,7 +1679,6 @@
       });
     }
 
-    // ─── Severity Pills ───────────────────────────────────────────────────
     if (dom.severityPills) {
       dom.severityPills.addEventListener('click', (ev) => {
         const pill = ev.target.closest('.pill[data-severity]');
@@ -1640,19 +1687,16 @@
       });
     }
 
-    // ─── Export CSV ───────────────────────────────────────────────────────
     if (dom.exportCsvBtn) {
       dom.exportCsvBtn.addEventListener('click', exportCurrentTabAsCSV);
     }
 
-    // ─── Theme toggle ─────────────────────────────────────────────────────
     if (dom.themeToggleBtn) {
       dom.themeToggleBtn.addEventListener('click', () => {
         setTheme(state.ui.theme === 'dark' ? 'light' : 'dark');
       });
     }
 
-    // ─── Capacity Drawer ──────────────────────────────────────────────────
     if (dom.capacityBtn) {
       dom.capacityBtn.addEventListener('click', openCapacityDrawer);
     }
@@ -1662,7 +1706,6 @@
       });
     }
 
-    // ─── Wave 1: Detail Drawer (log/auth/session) ────────────────────────
     if (dom.detailDrawer) {
       dom.detailDrawer.addEventListener('click', (ev) => {
         if (ev.target.closest('[data-close]')) closeDetailDrawer();
@@ -1691,7 +1734,6 @@
             () => flash('Falhou ✗')
           );
         } else {
-          // Fallback: textarea + execCommand
           const ta = document.createElement('textarea');
           ta.value = json;
           ta.style.position = 'fixed';
@@ -1705,9 +1747,7 @@
       });
     }
 
-    // ─── Atalhos globais ──────────────────────────────────────────────────
     document.addEventListener('keydown', (ev) => {
-      // ESC fecha drawers (precedência: detail > capacity)
       if (ev.key === 'Escape' && state.ui.detailOpen) {
         closeDetailDrawer();
         return;
@@ -1724,7 +1764,6 @@
       else if (k === '2') setActiveTab('auth');
       else if (k === '3') setActiveTab('sessions');
       else if (k === '/') {
-        // foca a busca como em apps modernos
         if (dom.searchInput) {
           ev.preventDefault();
           dom.searchInput.focus();
@@ -1737,7 +1776,6 @@
       }
     });
 
-    // Auto-refresh visibility-aware
     document.addEventListener('visibilitychange', handleVisibilityChange);
   }
 
@@ -1991,7 +2029,6 @@
       return;
     }
 
-    // Tema: aplicar antes de tudo (sem transição na carga inicial = anti-FOUC)
     state.ui.theme = detectInitialTheme();
     applyTheme(state.ui.theme, /* withTransition */ false);
 
@@ -2001,13 +2038,12 @@
     startAutoRefresh();
     startLocalTick();
 
-    // Boot da UI: cortina + service worker
     bootUIChrome();
     registerServiceWorker();
   }
 
   // ==========================================================================
-  // 22. UI CHROME BOOTSTRAP — Remoção da cortina de carregamento
+  // 22. UI CHROME BOOTSTRAP
   // ==========================================================================
   function bootUIChrome() {
     document.body.classList.add('pronto');
@@ -2021,7 +2057,7 @@
   }
 
   // ==========================================================================
-  // 23. PWA — Service Worker registration
+  // 23. PWA
   // ==========================================================================
   function registerServiceWorker() {
     if (!('serviceWorker' in navigator)) return;
