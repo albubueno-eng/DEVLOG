@@ -2022,3 +2022,6 @@ if ('serviceWorker' in navigator) {
   });
 }
 })();
+
+// Abre a cortina suavemente sem piscar
+document.body.classList.add('pronto');
