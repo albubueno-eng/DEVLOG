@@ -29,7 +29,7 @@
   // ==========================================================================
   const CONFIG = {
     // ⚠️ ATENÇÃO: Substitua pela URL real de Deploy do seu Apps Script
-    URL_DO_APPS_SCRIPT: 'SUA_URL_AQUI',
+    URL_DO_APPS_SCRIPT: 'https://script.google.com/macros/s/AKfycbzqjZtyCn7X1lWQBSRYLwW-MijJN53YLPoHJrjjBh5y6P1kTaBATNpAV13KV9OgNYPx/exec',
     API_KEY: 'ee91297b-685b-4ae4-b131-8434841c882e',
 
     LIMIT: 500,
