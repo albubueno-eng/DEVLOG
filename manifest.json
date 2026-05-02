@@ -1,47 +1,20 @@
 {
-  "systemConfig": {
-    "productName": "God Mode (Developer Central)",
-    "version": "4.1.0-release",
-    "environment": "production",
-    "architecture": "Serverless (Google Apps Script + Vanilla JS)",
-    "lastAudit": "2026-05-01T21:33:45Z"
-  },
-  "modulesStatus": {
-    "capacityMonitor": {
-      "status": "operational",
-      "features": ["self_monitoring", "multi_tenant_polling", "smart_progress_bar"],
-      "timeoutToleranceMs": 10000
+  "name": "God Mode - Central Dev",
+  "short_name": "God Mode",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2205/2205206.png",
+      "sizes": "192x192",
+      "type": "image/png"
     },
-    "knowledgeBase": {
-      "status": "operational",
-      "activePatterns": 40,
-      "aiDebuggingLayer": 1,
-      "drawerIntegration": true
-    },
-    "dataExport": {
-      "status": "operational",
-      "format": "CSV (RFC 4180)",
-      "encoding": "UTF-8 with BOM"
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2205/2205206.png",
+      "sizes": "512x512",
+      "type": "image/png"
     }
-  },
-  "designSystem": {
-    "guidelines": ["Apple HIG", "Samsung One UI"],
-    "colorScheme": "dynamic",
-    "tokens": "semantic_layer",
-    "features": {
-      "darkMode": true,
-      "glassmorphism": true,
-      "fluidTransitions": true
-    }
-  },
-  "uxQualityOfLife": {
-    "liveSearch": { "active": true, "debounceMs": 180 },
-    "severityFilters": { "active": true, "inMemory": true },
-    "keyboardShortcuts": { "active": true, "globalListener": true }
-  },
-  "roadmap": {
-    "currentPhase": "Phase 4 (Onda 1C) - Completed",
-    "nextMilestone": "Phase 5 (Onda 2) - Gemini AI Integration & War Room Mode",
-    "readiness": "Ready for deployment"
-  }
+  ]
 }
