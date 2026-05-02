@@ -89,7 +89,7 @@
     <!-- ============================ MAIN AREA ============================ -->
     <main class="main" role="main">
 
-      <!-- Topbar -->
+     <!-- Topbar -->
       <header class="topbar">
         <div class="topbar__heading">
           <h2 class="topbar__title" id="mainTitle">Visão Geral</h2>
@@ -99,16 +99,17 @@
         </div>
 
         <div class="topbar__actions">
+          
+          <!-- User Profile & Logout (ESTA É A POSIÇÃO CORRETA) -->
+          <div style="display: flex; align-items: center; gap: 12px; margin-right: 16px; border-right: 1px solid rgba(255,255,255,0.1); padding-right: 16px;">
+            <span style="font-size: 13px; font-weight: 500; color: #94A3B8;" id="loggedUserDisplay">Admin</span>
+            <button class="btn btn--ghost btn--small" id="logoutBtn" type="button" aria-label="Sair">Sair</button>
+          </div>
+
           <!-- Capacity Monitor — abre drawer lateral -->
           <button class="btn btn--ghost btn--icon-only" id="capacityBtn" type="button"
                   aria-label="Saúde dos apps monitorados" title="Capacity Monitor"
                   aria-haspopup="dialog" aria-expanded="false" aria-controls="capacityDrawer">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-            </svg>
-            <span class="capacity-btn__badge" id="capacityBadge" hidden>0</span>
-          </button>
 
           <!-- Theme Toggle (Sol/Lua) -->
           <button class="btn btn--ghost btn--icon-only" id="themeToggleBtn" type="button"
