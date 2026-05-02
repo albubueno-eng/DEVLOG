@@ -2025,3 +2025,12 @@ if ('serviceWorker' in navigator) {
 
 // Abre a cortina suavemente sem piscar
 document.body.classList.add('pronto');
+
+// Remove a tampa de carregamento suavemente após tudo estar no lugar
+setTimeout(() => {
+  const tampa = document.getElementById('tampa-carregamento');
+  if (tampa) {
+    tampa.style.opacity = '0';
+    setTimeout(() => tampa.remove(), 400); // Remove do código após sumir
+  }
+}, 150); // Um atraso minúsculo de 150ms para garantir que o Android piscou o que tinha que piscar
