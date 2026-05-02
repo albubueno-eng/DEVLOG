@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Login — God Mode Central</title>
+  <meta name="theme-color" content="#0B1B33" />
+  
+  <style>
+    /* =======================================================================
+       CSS INLINE PREMIUM - Isolado para não sujar o dashboard
+       ======================================================================= */
+    :root {
+      --bg-dark: #0B1B33;
+      --brand-blue: #2563EB;
+      --brand-blue-hover: #1D4ED8;
+      --text-main: #F8FAFC;
+      --text-muted: #94A3B8;
+      --border-glass: rgba(255, 255, 255, 0.1);
+      --bg-glass: rgba(15, 23, 42, 0.6);
+      --error-red: #EF4444;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Background Blobs (Profundidade) */
+    .blob {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(80px);
+      z-index: 0;
+      opacity: 0.5;
+    }
+    .blob--a { width: 400px; height: 400px; background: rgba(37, 99, 235, 0.3); top: -100px; left: -100px; }
+    .blob--b { width: 300px; height: 300px; background: rgba(139, 92, 246, 0.2); bottom: -50px; right: -50px; }
+
+    /* Glass Card */
+    .login-card {
+      background: var(--bg-glass);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border-glass);
+      border-radius: 16px;
+      padding: 40px;
+      width: 100%;
+      max-width: 400px;
+      z-index: 10;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      animation: slideUpFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes slideUpFade {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .login-header { text-align: center; margin-bottom: 32px; }
+    .login-title { font-size: 24px; font-weight: 600; margin-bottom: 8px; letter-spacing: -0.5px; }
+    .login-subtitle { font-size: 14px; color: var(--text-muted); }
+
+    .form-group { margin-bottom: 20px; }
+    .form-label {
+      display: block; font-size: 13px; font-weight: 500; margin-bottom: 8px; color: var(--text-muted);
+    }
+    .form-input {
+      width: 100%; padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-glass);
+      background: rgba(255, 255, 255, 0.05); color: var(--text-main); font-size: 15px;
+      transition: all 0.2s ease; outline: none;
+    }
+    .form-input:focus { border-color: var(--brand-blue); background: rgba(255, 255, 255, 0.1); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2); }
+
+    .btn-submit {
+      width: 100%; padding: 12px; border-radius: 8px; border: none; background: var(--brand-blue);
+      color: white; font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.2s ease;
+      display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 32px;
+    }
+    .btn-submit:hover { background: var(--brand-blue-hover); }
+    .btn-submit:disabled { opacity: 0.7; cursor: not-allowed; }
+
+    /* Spinner */
+    .spinner {
+      width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-radius: 50%;
+      border-top-color: white; animation: spin 0.8s linear infinite; display: none;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .btn-submit.is-loading .spinner { display: block; }
+    .btn-submit.is-loading .btn-text { display: none; }
+
+    .error-msg {
+      background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); color: var(--error-red);
+      padding: 12px; border-radius: 8px; font-size: 13px; text-align: center; margin-bottom: 20px; display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="blob blob--a"></div>
+  <div class="blob blob--b"></div>
+
+  <div class="login-card">
+    <header class="login-header">
+      <h1 class="login-title">God Mode</h1>
+      <p class="login-subtitle">Acesso restrito à Central de Desenvolvedor</p>
+    </header>
+
+    <div id="errorBox" class="error-msg">Usuário ou senha incorretos.</div>
+
+    <form id="loginForm">
+      <div class="form-group">
+        <label class="form-label" for="usuario">Usuário</label>
+        <input class="form-input" type="text" id="usuario" autocomplete="username" required spellcheck="false" placeholder="ex: godman">
+      </div>
+      
+      <div class="form-group">
+        <label class="form-label" for="senha">Senha</label>
+        <input class="form-input" type="password" id="senha" autocomplete="current-password" required placeholder="••••••••">
+      </div>
+
+      <button type="submit" class="btn-submit" id="submitBtn">
+        <span class="btn-text">Entrar</span>
+        <div class="spinner"></div>
+      </button>
+    </form>
+  </div>
+
+  <script>
+    /**
+     * LÓGICA DE LOGIN SÊNIOR
+     * 1. Protege múltiplas submissões
+     * 2. Captura UserAgent para auditoria
+     * 3. Salva no localStorage e redireciona rápido
+     */
+    const CONFIG = {
+      // ⚠️ ATENÇÃO: Substitua pela URL real de Deploy do seu Apps Script
+      SCRIPT_URL: 'SUA_URL_DO_WEB_APP_AQUI', 
+      API_KEY: 'ee91297b-685b-4ae4-b131-8434841c882e'
+    };
+
+    const form = document.getElementById('loginForm');
+    const btn = document.getElementById('submitBtn');
+    const errorBox = document.getElementById('errorBox');
+
+    // Se já estiver logado, foge daqui
+    if (localStorage.getItem('gm_token')) {
+      window.location.replace('./index.html');
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const usuario = document.getElementById('usuario').value.trim();
+      const senha = document.getElementById('senha').value;
+      const dispositivo = navigator.userAgent;
+
+      if (!usuario || !senha) return;
+
+      // Estado de loading
+      btn.classList.add('is-loading');
+      btn.disabled = true;
+      errorBox.style.display = 'none';
+
+      try {
+        const response = await fetch(CONFIG.SCRIPT_URL, {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'logingodmode',
+            apiKey: CONFIG.API_KEY,
+            usuario,
+            senha,
+            dispositivo
+          })
+        });
+
+        const result = await response.json();
+
+        if (result.ok && result.data && result.data.token) {
+          // Guarda os dados na sessão
+          localStorage.setItem('gm_token', result.data.token);
+          localStorage.setItem('gm_user', result.data.usuario);
+          localStorage.setItem('gm_nivel', result.data.nivel);
+          localStorage.setItem('gm_escopo', result.data.idClienteVinculado);
+          
+          // Redireciona para o painel imediatamente
+          window.location.replace('./index.html');
+        } else {
+          // Erro de API ou bloqueio
+          errorBox.textContent = result.error || 'Erro na autenticação.';
+          errorBox.style.display = 'block';
+          btn.classList.remove('is-loading');
+          btn.disabled = false;
+        }
+      } catch (err) {
+        errorBox.textContent = 'Falha de rede. Verifique a URL do Apps Script.';
+        errorBox.style.display = 'block';
+        btn.classList.remove('is-loading');
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
