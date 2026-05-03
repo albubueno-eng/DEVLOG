@@ -1334,12 +1334,13 @@ function closeDetailDrawer() {
 // [GM-04] Action principal de resolução
 async function actionResolverLog(logData) {
   const resolucao = prompt('Solução aplicada (opcional):', '');
-  if (resolucao === null) return; // Cancelou
+  if (resolucao === null) return;
 
+  // NÃO usa setLoading aqui — deixa loadData() controlar o ciclo de loading
+  // sozinho. Senão criamos deadlock: setLoading(true) → loadData aborta com
+  // "if (state.isLoading) return" → setLoading(false) nunca é chamado.
   try {
-    setLoading(true);
     await adminApiPost('updatelogstatus', {
-      // Chave composta — backend localiza a linha na planilha
       timestamp:    logData.timestamp,
       idCliente:    logData.idCliente,
       mensagemErro: logData.mensagemErro,
@@ -1350,10 +1351,10 @@ async function actionResolverLog(logData) {
     await loadData();
     toast('Log marcado como resolvido', 'success');
   } catch (err) {
-    toast(`Falha ao resolver: ${err.message}`, 'error');
-    setLoading(false);
+    toast('Falha ao resolver: ' + (err.message || err), 'error');
   }
 }
+
 
 
 function populateDetailDrawer(kind, data, kbMatch) {
@@ -1539,7 +1540,10 @@ function _esc(str) {
 function updateConnectionStatus() {
   const pill = dom.connectionStatus;
   if (!pill) return;
-  const textEl = pill.querySelector('.status-pill__label'); // ← era __text, agora __label
+  // O HTML usa <span class="status-pill__label"> dentro do pill.
+  // Procura ambos os nomes para compatibilidade.
+  const textEl = pill.querySelector('.status-pill__label') ||
+                 pill.querySelector('.status-pill__text');
   if (state.isLoading) {
     pill.dataset.state = 'loading';
     if (textEl) textEl.textContent = 'Sincronizando…';
@@ -1547,10 +1551,11 @@ function updateConnectionStatus() {
     pill.dataset.state = 'error';
     if (textEl) textEl.textContent = 'Erro de conexão';
   } else {
-    pill.dataset.state = 'online'; // ← era 'ok', alinha com data-state do CSS
+    pill.dataset.state = 'online'; // CSS provavelmente reage a 'online'
     if (textEl) textEl.textContent = 'Online';
   }
 }
+
 
 function updateRefreshButton() {
   if (!dom.refreshBtn) return;
