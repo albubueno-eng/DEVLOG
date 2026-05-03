@@ -2915,7 +2915,19 @@ if (document.readyState === 'loading') {
  * ========================================================= */
 (function initCapacityMonitor(){
   // ID dos elementos que DEVEM abrir o monitor (lista branca estrita)
-  const SELETOR_ABRIR = '#btnMonitorClientes, #menuMonitorClientes, [data-action="abrir-monitor-clientes"]';
+ const SELETOR_ABRIR = [
+  '#btnMonitorClientes',
+  '#menuMonitorClientes',
+  '#btnCapacityMonitor',
+  '#capacityMonitorBtn',
+  '#topbarCapacityBtn',
+  '[data-action="abrir-monitor-clientes"]',
+  '[data-action="capacity-monitor"]',
+  '[data-action="monitor"]',
+  '[title="Monitor de Clientes"]',
+  '[aria-label="Monitor de Clientes"]'
+].join(', ');
+
 
   async function fetchCapacity() {
     const url = window.SCRIPT_URL + '?action=getCapacityMonitor&apiKey=' + encodeURIComponent(window.API_KEY);
