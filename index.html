@@ -17,29 +17,22 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="God Mode" />
 
-  <!-- iOS: ícone de instalação (iOS ignora o manifest, precisa separado) -->
+  <!-- Ícones -->
   <link rel="apple-touch-icon" href="godmode-icon-192.png" />
   <link rel="apple-touch-icon" sizes="192x192" href="godmode-icon-192.png" />
   <link rel="apple-touch-icon" sizes="512x512" href="godmode-icon-512.png" />
-
-  <!-- Favicon (browser desktop) -->
   <link rel="icon" type="image/png" sizes="192x192" href="godmode-icon-192.png" />
   <link rel="icon" type="image/png" sizes="512x512" href="godmode-icon-512.png" />
 
-    <!-- Estilo principal -->
+  <!-- Estilo principal -->
   <link rel="stylesheet" href="style.css">
 </head>
 
-<!-- Backdrop com gradiente + blobs de luz (profundidade premium) -->
 <body style="background-color: #0B1B33; margin: 0; padding: 0;">
+  <!-- Cortina de Carregamento Inicial -->
   <div id="tampa-carregamento" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: #0B1B33; z-index: 99999; transition: opacity 0.4s ease;"></div>
-  <div class="backdrop" aria-hidden="true">
-    <div class="blob blob--a"></div>
-    <div class="blob blob--b"></div>
-  </div>
-
-  <!-- Backdrop com gradiente + blobs de luz (profundidade premium) -->
-<body style="background-color: #0B1B33; margin: 0; padding: 0;">
+  
+  <!-- Backdrop com gradiente + blobs de luz -->
   <div class="backdrop" aria-hidden="true">
     <div class="blob blob--a"></div>
     <div class="blob blob--b"></div>
@@ -63,7 +56,6 @@
       <nav class="sidebar__nav" aria-label="Lista de empresas">
         <p class="sidebar__nav-label">Empresas</p>
         <ul class="client-list" id="clientList" role="list">
-          <!-- Itens injetados via JS na Fase 3 -->
           <li class="client-list__placeholder">Carregando empresas…</li>
         </ul>
       </nav>
@@ -89,7 +81,7 @@
     <!-- ============================ MAIN AREA ============================ -->
     <main class="main" role="main">
 
-     <!-- Topbar -->
+      <!-- Topbar -->
       <header class="topbar">
         <div class="topbar__heading">
           <h2 class="topbar__title" id="mainTitle">Visão Geral</h2>
@@ -99,36 +91,36 @@
         </div>
 
         <div class="topbar__actions">
-          
-          <!-- User Profile & Logout (ESTA É A POSIÇÃO CORRETA) -->
+          <!-- User Profile & Logout -->
           <div style="display: flex; align-items: center; gap: 12px; margin-right: 16px; border-right: 1px solid rgba(255,255,255,0.1); padding-right: 16px;">
             <span style="font-size: 13px; font-weight: 500; color: #94A3B8;" id="loggedUserDisplay">Admin</span>
             <button class="btn btn--ghost btn--small" id="logoutBtn" type="button" aria-label="Sair">Sair</button>
           </div>
 
-          <!-- Capacity Monitor — abre drawer lateral -->
+          <!-- Capacity Monitor -->
           <button class="btn btn--ghost btn--icon-only" id="capacityBtn" type="button"
                   aria-label="Saúde dos apps monitorados" title="Capacity Monitor"
                   aria-haspopup="dialog" aria-expanded="false" aria-controls="capacityDrawer">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+            </svg>
+          </button>
 
-          <!-- Theme Toggle (Sol/Lua) -->
+          <!-- Theme Toggle -->
           <button class="btn btn--ghost btn--icon-only" id="themeToggleBtn" type="button"
-                  aria-label="Alternar tema claro/escuro" title="Alternar tema"
-                  aria-pressed="false">
+                  aria-label="Alternar tema claro/escuro" title="Alternar tema" aria-pressed="false">
             <svg class="theme-icon theme-icon--sun" width="16" height="16" viewBox="0 0 24 24"
-                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                 stroke-linejoin="round" aria-hidden="true">
+                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="4"/>
               <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
             </svg>
             <svg class="theme-icon theme-icon--moon" width="16" height="16" viewBox="0 0 24 24"
-                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                 stroke-linejoin="round" aria-hidden="true">
+                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
             </svg>
           </button>
 
-          <!-- Atualizar (mantido) -->
+          <!-- Atualizar -->
           <button class="btn btn--ghost" id="refreshBtn" type="button" aria-label="Atualizar dados">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -138,22 +130,19 @@
             <span>Atualizar</span>
           </button>
         </div>
-        <!-- ============================ AUTH GUARD ============================ -->
-  <script>
-    // Se não tiver token, bloqueia a renderização e expulsa imediatamente
-    if (!localStorage.getItem('gm_token')) {
-      window.location.replace('./login.html');
-    }
-  </script>
+
+        <!-- AUTH GUARD NO FRONT -->
+        <script>
+          if (!localStorage.getItem('gm_token')) {
+            window.location.replace('./login.html');
+          }
+        </script>
       </header>
 
-      <!-- KPIs Operacionais (primeira linha — telemetria comportamental) -->
+      <!-- KPIs Operacionais -->
       <section class="kpi-grid kpi-grid--ops" aria-label="Indicadores operacionais">
         <article class="kpi-card kpi-card--live">
-          <p class="kpi-card__label">
-            <span class="live-dot" aria-hidden="true"></span>
-            Online Agora
-          </p>
+          <p class="kpi-card__label"><span class="live-dot" aria-hidden="true"></span>Online Agora</p>
           <p class="kpi-card__value" id="kpiOnline">—</p>
         </article>
         <article class="kpi-card">
@@ -161,11 +150,11 @@
           <p class="kpi-card__value" id="kpiLogins">—</p>
         </article>
         <article class="kpi-card kpi-card--danger">
-          <p class="kpi-card__label">Falhas de Login Hoje</p>
+          <p class="kpi-card__label">Falhas de Login</p>
           <p class="kpi-card__value" id="kpiFalhas">—</p>
         </article>
         <article class="kpi-card kpi-card--warning">
-          <p class="kpi-card__label">Sessões Expiradas Hoje</p>
+          <p class="kpi-card__label">Sessões Expiradas</p>
           <p class="kpi-card__value" id="kpiExpiradas">—</p>
         </article>
       </section>
@@ -179,12 +168,10 @@
           </h3>
           <p class="live-strip__meta" id="liveStripMeta">—</p>
         </header>
-        <div class="live-strip__list" id="liveStripList" role="list">
-          <!-- chips injetados via JS -->
-        </div>
+        <div class="live-strip__list" id="liveStripList" role="list"></div>
       </section>
 
-      <!-- KPIs de Logs (segunda linha) -->
+      <!-- KPIs de Logs -->
       <section class="kpi-grid" aria-label="Indicadores de logs" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
         <article class="kpi-card">
           <p class="kpi-card__label">Total de Logs</p>
@@ -202,86 +189,61 @@
           <p class="kpi-card__label">Informativos</p>
           <p class="kpi-card__value" id="kpiInfos">—</p>
         </article>
-        <!-- [GM-06] NOVO CARD MTTR -->
         <article class="kpi-card" style="border-top: 3px solid var(--brand-blue);">
           <p class="kpi-card__label">MTTR (Tempo Médio de Resolução)</p>
           <p class="kpi-card__value" id="kpiMttr">—</p>
         </article>
       </section>
 
-      <!-- Tabs + Toolbar de Filtros + Lista de Eventos -->
+      <!-- Tabs + Toolbar -->
       <section class="events-section" aria-label="Eventos do sistema">
         <header class="events-section__header">
-          <!-- Linha 1: tabs + meta -->
+          
           <div class="events-section__row events-section__row--top">
             <div class="tabs" role="tablist" id="eventTabs">
-              <button class="tab tab--active" type="button" role="tab"
-                      aria-selected="true" data-tab="logs">
-                Logs
-                <span class="tab__count" id="tabCountLogs">0</span>
+              <button class="tab tab--active" type="button" role="tab" aria-selected="true" data-tab="logs">
+                Logs <span class="tab__count" id="tabCountLogs">0</span>
               </button>
-              <button class="tab" type="button" role="tab"
-                      aria-selected="false" data-tab="auth">
-                Auth
-                <span class="tab__count" id="tabCountAuth">0</span>
+              <button class="tab" type="button" role="tab" aria-selected="false" data-tab="auth">
+                Auth <span class="tab__count" id="tabCountAuth">0</span>
               </button>
-              <button class="tab" type="button" role="tab"
-                      aria-selected="false" data-tab="sessions">
-                Sessões
-                <span class="tab__count" id="tabCountSessions">0</span>
+              <button class="tab" type="button" role="tab" aria-selected="false" data-tab="sessions">
+                Sessões <span class="tab__count" id="tabCountSessions">0</span>
               </button>
             </div>
             <p class="events-section__meta" id="logsMeta">—</p>
           </div>
 
-          <!-- Linha 2: toolbar de filtros (busca + severidade + tempo + export) -->
+          <!-- Toolbar de Filtros -->
           <div class="events-section__row events-section__row--toolbar" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-            <!-- Busca textual (filtra in-memory) -->
+            
+            <!-- Busca -->
             <div class="search-field" role="search" style="flex-grow: 1;">
-              <svg class="search-field__icon" width="14" height="14" viewBox="0 0 24 24"
-                   fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                   stroke-linejoin="round" aria-hidden="true">
-                <circle cx="11" cy="11" r="7"/>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              <svg class="search-field__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
               </svg>
-              <input class="search-field__input" id="searchInput" type="search"
-                     placeholder="Buscar por nome, mensagem, app, dispositivo…"
-                     autocomplete="off" spellcheck="false"
-                     aria-label="Buscar nos eventos visíveis">
-              <button class="search-field__clear" id="searchClearBtn" type="button"
-                      aria-label="Limpar busca" hidden>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                     stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <line x1="18" y1="6" x2="6" y2="18"/>
-                  <line x1="6" y1="6" x2="18" y2="18"/>
+              <input class="search-field__input" id="searchInput" type="search" placeholder="Buscar por nome, mensagem, app, dispositivo…" autocomplete="off" spellcheck="false">
+              <button class="search-field__clear" id="searchClearBtn" type="button" aria-label="Limpar busca" hidden>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                 </svg>
               </button>
             </div>
 
-            <!-- Pills de severidade — só visíveis na tab Logs -->
-            <div class="severity-pills" id="severityPills" role="group"
-                 aria-label="Filtrar por gravidade" data-tab-scope="logs">
-              <button class="pill pill--erro is-active" type="button"
-                      data-severity="ERRO" aria-pressed="true">
-                <span class="pill__dot" aria-hidden="true"></span>
-                <span class="pill__label">Erros</span>
-                <span class="pill__count" id="pillCountErro">0</span>
+            <!-- Severidade -->
+            <div class="severity-pills" id="severityPills" role="group" aria-label="Filtrar por gravidade" data-tab-scope="logs">
+              <button class="pill pill--erro is-active" type="button" data-severity="ERRO" aria-pressed="true">
+                <span class="pill__dot" aria-hidden="true"></span><span class="pill__label">Erros</span><span class="pill__count" id="pillCountErro">0</span>
               </button>
-              <button class="pill pill--alerta is-active" type="button"
-                      data-severity="ALERTA" aria-pressed="true">
-                <span class="pill__dot" aria-hidden="true"></span>
-                <span class="pill__label">Alertas</span>
-                <span class="pill__count" id="pillCountAlerta">0</span>
+              <button class="pill pill--alerta is-active" type="button" data-severity="ALERTA" aria-pressed="true">
+                <span class="pill__dot" aria-hidden="true"></span><span class="pill__label">Alertas</span><span class="pill__count" id="pillCountAlerta">0</span>
               </button>
-              <button class="pill pill--info is-active" type="button"
-                      data-severity="INFO" aria-pressed="true">
-                <span class="pill__dot" aria-hidden="true"></span>
-                <span class="pill__label">Infos</span>
-                <span class="pill__count" id="pillCountInfo">0</span>
+              <button class="pill pill--info is-active" type="button" data-severity="INFO" aria-pressed="true">
+                <span class="pill__dot" aria-hidden="true"></span><span class="pill__label">Infos</span><span class="pill__count" id="pillCountInfo">0</span>
               </button>
             </div>
 
-            <!-- [GM-08] Filtro Temporal -->
+            <!-- Filtro Temporal [GM-08] -->
             <div class="time-filter" style="margin-left: auto;">
               <select id="timeFilterSelect" class="form-input" style="padding: 6px 12px; font-size: 13px; border-radius: 6px; width: auto; height: 32px; background: rgba(255,255,255,0.05); color: var(--text-main); border: 1px solid rgba(255,255,255,0.1); cursor: pointer; outline: none;">
                 <option value="all" style="background: var(--bg-dark);">Todo o período</option>
@@ -291,50 +253,10 @@
               </select>
             </div>
 
-            <!-- Exportar CSV -->
-            <button class="btn btn--ghost btn--small" id="exportCsvBtn" type="button"
-                    aria-label="Exportar visíveis como CSV" title="Exportar CSV">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-              <span>Exportar</span>
-            </button>
-          </div>
-
-            <!-- Pills de severidade — só visíveis na tab Logs -->
-            <div class="severity-pills" id="severityPills" role="group"
-                 aria-label="Filtrar por gravidade" data-tab-scope="logs">
-              <button class="pill pill--erro is-active" type="button"
-                      data-severity="ERRO" aria-pressed="true">
-                <span class="pill__dot" aria-hidden="true"></span>
-                <span class="pill__label">Erros</span>
-                <span class="pill__count" id="pillCountErro">0</span>
-              </button>
-              <button class="pill pill--alerta is-active" type="button"
-                      data-severity="ALERTA" aria-pressed="true">
-                <span class="pill__dot" aria-hidden="true"></span>
-                <span class="pill__label">Alertas</span>
-                <span class="pill__count" id="pillCountAlerta">0</span>
-              </button>
-              <button class="pill pill--info is-active" type="button"
-                      data-severity="INFO" aria-pressed="true">
-                <span class="pill__dot" aria-hidden="true"></span>
-                <span class="pill__label">Infos</span>
-                <span class="pill__count" id="pillCountInfo">0</span>
-              </button>
-            </div>
-
-            <!-- Exportar CSV — exporta o que está visível (filtro composto) -->
-            <button class="btn btn--ghost btn--small" id="exportCsvBtn" type="button"
-                    aria-label="Exportar visíveis como CSV" title="Exportar CSV">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
+            <!-- Exportar -->
+            <button class="btn btn--ghost btn--small" id="exportCsvBtn" type="button" aria-label="Exportar visíveis como CSV" title="Exportar CSV">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
               </svg>
               <span>Exportar</span>
             </button>
@@ -342,7 +264,6 @@
         </header>
 
         <div class="events-list" id="logsList" role="list">
-          <!-- conteúdo da tab ativa, injetado via JS -->
           <div class="empty-state" id="emptyState">
             <div class="empty-state__icon" aria-hidden="true">∅</div>
             <p class="empty-state__title">Carregando eventos…</p>
@@ -352,56 +273,38 @@
       </section>
 
     </main>
-
   </div><!-- /.app-shell -->
 
   <!-- ============================ DRAWER: CAPACITY MONITOR ============================ -->
-  <aside class="drawer" id="capacityDrawer" hidden aria-hidden="true"
-         role="dialog" aria-modal="true" aria-labelledby="capacityDrawerTitle">
+  <aside class="drawer" id="capacityDrawer" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="capacityDrawerTitle">
     <div class="drawer__backdrop" data-close></div>
-
     <div class="drawer__panel" role="document">
       <header class="drawer__header">
         <div class="drawer__heading">
           <h2 class="drawer__title" id="capacityDrawerTitle">Capacity Monitor</h2>
-          <p class="drawer__subtitle" id="capacityDrawerSubtitle">
-            Saúde e saturação dos apps monitorados
-          </p>
+          <p class="drawer__subtitle" id="capacityDrawerSubtitle">Saúde e saturação dos apps monitorados</p>
         </div>
         <button class="drawer__close" type="button" data-close aria-label="Fechar">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </header>
-
-      <!-- Sumário no topo: contagem por status -->
-      <section class="drawer__summary" id="capacitySummary" aria-label="Resumo de saúde">
-        <!-- chips de status injetados via JS -->
-      </section>
-
-      <!-- Lista de apps -->
+      <section class="drawer__summary" id="capacitySummary" aria-label="Resumo de saúde"></section>
       <section class="drawer__body" id="capacityList" role="list" aria-label="Lista de apps monitorados">
-        <!-- cards injetados via JS -->
         <div class="empty-state" id="capacityEmpty">
           <div class="empty-state__icon" aria-hidden="true">∅</div>
           <p class="empty-state__title">Nenhum app monitorado</p>
           <p class="empty-state__text">Aguardando primeira coleta da Central.</p>
         </div>
       </section>
-
       <footer class="drawer__footer">
         <p class="drawer__footer-meta" id="capacityMeta">—</p>
       </footer>
     </div>
   </aside>
 
-  <!-- ============================ DRAWER: DETALHE DO EVENTO (LOG/AUTH/SESSION) ============================ -->
-  <aside class="drawer drawer--detail" id="detailDrawer" hidden aria-hidden="true"
-         role="dialog" aria-modal="true" aria-labelledby="detailDrawerTitle">
+  <!-- ============================ DRAWER: DETALHE ============================ -->
+  <aside class="drawer drawer--detail" id="detailDrawer" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="detailDrawerTitle">
     <div class="drawer__backdrop" data-close></div>
-
     <div class="drawer__panel" role="document">
       <header class="drawer__header">
         <div class="drawer__heading">
@@ -409,32 +312,17 @@
           <p class="drawer__subtitle" id="detailDrawerSubtitle">—</p>
         </div>
         <button class="drawer__close" type="button" data-close aria-label="Fechar">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </header>
-
-      <!-- Bloco principal: dados estruturados do evento -->
       <section class="drawer__body" id="detailBody" aria-label="Dados do evento">
-        <!-- Cabeçalho do evento (severidade, timestamp, cliente, app, usuário, dispositivo) -->
-        <div class="detail-meta" id="detailMeta">
-          <!-- linhas key/value injetadas via JS -->
-        </div>
-
-        <!-- Mensagem completa (sem truncamento) -->
+        <div class="detail-meta" id="detailMeta"></div>
         <div class="detail-section">
           <h3 class="detail-section__title">Mensagem completa</h3>
           <pre class="detail-message" id="detailMessage">—</pre>
         </div>
-
-        <!-- Sugestão da Knowledge Base (preenchida só quando houver match) -->
         <div class="detail-section detail-section--kb" id="detailKbWrap" hidden>
-          <h3 class="detail-section__title">
-            <span class="kb-badge" aria-hidden="true">KB</span>
-            Padrão reconhecido
-          </h3>
+          <h3 class="detail-section__title"><span class="kb-badge" aria-hidden="true">KB</span> Padrão reconhecido</h3>
           <article class="kb-suggestion" id="detailKbCard">
             <header class="kb-suggestion__head">
               <span class="kb-suggestion__id" id="detailKbId">—</span>
@@ -446,14 +334,9 @@
           </article>
         </div>
       </section>
-
       <footer class="drawer__footer">
         <button class="btn btn--ghost btn--sm" type="button" id="detailCopyBtn">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-          </svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           <span>Copiar JSON</span>
         </button>
         <p class="drawer__footer-meta" id="detailMetaFoot">—</p>
@@ -464,36 +347,25 @@
   <!-- ============================ MODAL: NOVO CLIENTE ============================ -->
   <div class="modal" id="clientModal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="clientModalTitle">
     <div class="modal__backdrop" data-close></div>
-
     <div class="modal__panel" role="document">
       <header class="modal__header">
         <h2 class="modal__title" id="clientModalTitle">Novo Cliente</h2>
         <button class="modal__close" type="button" data-close aria-label="Fechar">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </header>
-
       <form class="modal__body" id="clientForm" novalidate>
         <div class="field">
           <label class="field__label" for="fldClientId">ID do Cliente</label>
-          <input class="field__input" id="fldClientId" name="idCliente"
-                 type="text" autocomplete="off" required
-                 maxlength="32" placeholder="ex: crv, las, acme">
+          <input class="field__input" id="fldClientId" name="idCliente" type="text" autocomplete="off" required maxlength="32" placeholder="ex: crv, las, acme">
           <p class="field__hint">Letras minúsculas, números, hífen ou underscore. Sem espaços.</p>
           <p class="field__error" data-error-for="idCliente"></p>
         </div>
-
         <div class="field">
           <label class="field__label" for="fldClientName">Nome de Exibição</label>
-          <input class="field__input" id="fldClientName" name="nomeCliente"
-                 type="text" autocomplete="off" required
-                 maxlength="80" placeholder="ex: CRV Logística">
+          <input class="field__input" id="fldClientName" name="nomeCliente" type="text" autocomplete="off" required maxlength="80" placeholder="ex: CRV Logística">
           <p class="field__error" data-error-for="nomeCliente"></p>
         </div>
-
         <div class="field field--row">
           <label class="field__toggle">
             <input type="checkbox" id="fldClientActive" name="ativo" checked>
@@ -501,10 +373,8 @@
             <span class="field__toggle-label">Cliente ativo</span>
           </label>
         </div>
-
         <p class="modal__formError" id="clientFormError" hidden></p>
       </form>
-
       <footer class="modal__footer">
         <button type="button" class="btn btn--ghost" data-close>Cancelar</button>
         <button type="submit" class="btn btn--primary" id="clientSaveBtn" form="clientForm">
@@ -519,6 +389,6 @@
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js');
   }
-</script>
+  </script>
 </body>
 </html>
