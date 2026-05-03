@@ -896,3 +896,530 @@ window.addEventListener('DOMContentLoaded', initBase);
 
 // Exporta para a parte 2 poder estender
 window.__clientApp = { state, dom, CONFIG, apiPost, apiGet, toast, _esc, fmtDateTime, fmtRelativeTime, loadData };
+
+/* =============================================================================
+   client.js — Portal do Cliente — Parte 2/2
+   ESTENDE a parte 1 (acrescentar ao final do mesmo arquivo)
+   Adiciona: funcionários (CRUD), modal quota, exports CSV/PDF, init final
+   ============================================================================= */
+
+// ===========================================================================
+// 20. FUNCIONÁRIOS — render da tabela
+// ===========================================================================
+function renderFuncionarios() {
+  if (!dom.funcionariosTbody) return;
+
+  const q = (dom.funcSearch?.value || '').trim().toLowerCase();
+  const list = (state.data.funcionarios || []).filter(f => {
+    if (!q) return true;
+    return JSON.stringify(f).toLowerCase().includes(q);
+  });
+
+  // Atualiza info de quota no toolbar
+  const k = calcKPIs();
+  if (dom.funcQuotaInfo) {
+    dom.funcQuotaInfo.textContent = `${k.quotaUsada} de ${k.quotaLimite || '—'} utilizados`;
+  }
+
+  if (!list.length) {
+    dom.funcionariosTbody.innerHTML = `<tr><td colspan="6" class="empty">Nenhum funcionário encontrado</td></tr>`;
+    return;
+  }
+
+  dom.funcionariosTbody.innerHTML = list.map((f, idx) => {
+    const status = String(f.status || 'ATIVO').toUpperCase();
+    const apps = Array.isArray(f.apps)
+      ? f.apps
+      : (typeof f.apps === 'string' ? f.apps.split(/[,;]/).map(s => s.trim()).filter(Boolean) : []);
+    const appsHtml = apps.map(a => `<span class="app-chip">${_esc(a)}</span>`).join('') || '<span style="color:var(--color-text-muted,#9ca3af);">—</span>';
+    const ultimoAcesso = f.ultimoAcesso || f.lastSeen || f.ultimoLogin;
+
+    return `
+      <tr data-idx="${idx}" data-usuario="${_esc(f.usuario || '')}">
+        <td><strong>${_esc(f.nome || '—')}</strong></td>
+        <td><code>${_esc(f.usuario || '—')}</code></td>
+        <td>${appsHtml}</td>
+        <td><span class="badge-status" data-status="${status}">${status}</span></td>
+        <td style="font-size:12px;color:var(--color-text-muted,#6b7280);">
+          ${_esc(ultimoAcesso ? fmtRelativeTime(ultimoAcesso) : 'Nunca')}
+        </td>
+        <td>
+          <div class="row-actions">
+            <button type="button" data-action="edit" title="Editar">✏️</button>
+            <button type="button" data-action="toggle" title="${status === 'ATIVO' ? 'Desativar' : 'Reativar'}">
+              ${status === 'ATIVO' ? '🚫' : '✅'}
+            </button>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+
+  // Bind row actions
+
+  $$('tr', dom.funcionariosTbody).forEach(tr => {
+    const idx = parseInt(tr.dataset.idx, 10);
+    if (Number.isNaN(idx)) return;
+    const f = list[idx];
+    if (!f) return;
+
+    tr.querySelector('[data-action="edit"]')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openFuncionarioModal(f);
+    });
+    tr.querySelector('[data-action="toggle"]')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleFuncionarioStatus(f);
+    });
+  });
+}
+
+// ===========================================================================
+// 21. FUNCIONÁRIOS — modal create / edit
+// ===========================================================================
+function openFuncionarioModal(funcionario = null) {
+  const isEdit = !!funcionario;
+  const form = dom.formFuncionario;
+  if (!form || !dom.modalFuncionario) return;
+
+  form.reset();
+
+  // Título
+  if (dom.modalFuncTitle) {
+    dom.modalFuncTitle.textContent = isEdit ? 'Editar Funcionário' : 'Novo Funcionário';
+  }
+
+  // Senha: obrigatória ao criar, opcional ao editar
+  const senhaInput = form.querySelector('#funcSenha');
+  const senhaHint  = form.querySelector('#funcSenhaHint');
+  if (senhaInput) {
+    senhaInput.required = !isEdit;
+    if (senhaHint) {
+      senhaHint.textContent = isEdit ? '(deixe em branco para manter a atual)' : '(min. 8 caracteres)';
+    }
+  }
+
+  // Usuário: read-only ao editar (é a chave)
+  const usuarioInput = form.querySelector('#funcUsuario');
+  if (usuarioInput) usuarioInput.readOnly = isEdit;
+
+  if (isEdit) {
+    form.querySelector('#funcId').value       = funcionario.usuario || '';
+    form.querySelector('#funcNome').value     = funcionario.nome || '';
+    form.querySelector('#funcUsuario').value  = funcionario.usuario || '';
+    form.querySelector('#funcEmail').value    = funcionario.email || '';
+    form.querySelector('#funcTelefone').value = funcionario.telefone || '';
+    form.querySelector('#funcStatus').value   = String(funcionario.status || 'ATIVO').toUpperCase();
+
+    // Apps (checkboxes)
+    const apps = Array.isArray(funcionario.apps)
+      ? funcionario.apps
+      : (typeof funcionario.apps === 'string' ? funcionario.apps.split(/[,;]/).map(s => s.trim()).filter(Boolean) : []);
+    form.querySelectorAll('input[name="apps"]').forEach(cb => {
+      cb.checked = apps.includes(cb.value);
+    });
+  }
+
+  dom.modalFuncionario.hidden = false;
+  dom.modalFuncionario.setAttribute('aria-hidden', 'false');
+  setTimeout(() => form.querySelector('#funcNome')?.focus(), 50);
+}
+
+function closeFuncionarioModal() {
+  if (!dom.modalFuncionario) return;
+  dom.modalFuncionario.hidden = true;
+  dom.modalFuncionario.setAttribute('aria-hidden', 'true');
+}
+
+async function submitFuncionarioForm(e) {
+  e.preventDefault();
+  const form = dom.formFuncionario;
+  if (!form) return;
+
+  const id        = form.querySelector('#funcId').value.trim();
+  const isEdit    = !!id;
+  const nome      = form.querySelector('#funcNome').value.trim();
+  const usuario   = form.querySelector('#funcUsuario').value.trim();
+  const email     = form.querySelector('#funcEmail').value.trim();
+  const telefone  = form.querySelector('#funcTelefone').value.trim();
+  const senha     = form.querySelector('#funcSenha').value;
+  const status    = form.querySelector('#funcStatus').value;
+  const apps      = $$('input[name="apps"]:checked', form).map(cb => cb.value);
+
+  // Validação client-side
+  if (!nome || nome.length < 2) {
+    toast('Nome inválido', 'error'); return;
+  }
+  if (!isEdit && !/^[a-zA-Z0-9._-]+$/.test(usuario)) {
+    toast('Usuário inválido (somente letras, números, ._-)', 'error'); return;
+  }
+  if (!isEdit && senha.length < 8) {
+    toast('Senha precisa ter ao menos 8 caracteres', 'error'); return;
+  }
+  if (!apps.length) {
+    toast('Selecione ao menos um app', 'error'); return;
+  }
+
+  // Anti-duplicata (criação)
+  if (!isEdit) {
+    const dup = (state.data.funcionarios || []).some(f => String(f.usuario||'').toLowerCase() === usuario.toLowerCase());
+    if (dup) { toast('Já existe um funcionário com esse usuário', 'error'); return; }
+
+    // Quota
+    const k = calcKPIs();
+    if (k.quotaLimite > 0 && k.quotaUsada >= k.quotaLimite) {
+      toast('Quota de funcionários atingida. Solicite aumento.', 'warning');
+      return;
+    }
+  }
+
+  const btn = form.querySelector('#btnSalvarFuncionario');
+  if (btn) { btn.disabled = true; btn.textContent = 'Salvando…'; }
+
+  try {
+    const payload = {
+      nome, usuario, email, telefone, status, apps,
+    };
+    if (senha) payload.senha = senha;
+
+    if (isEdit) {
+      await apiPost('atualizarFuncionario', { ...payload, usuarioOriginal: id });
+      toast('Funcionário atualizado', 'success');
+    } else {
+      await apiPost('criarFuncionario', payload);
+      toast('Funcionário criado', 'success');
+    }
+
+    closeFuncionarioModal();
+    await loadData();
+    renderFuncionarios();
+  } catch (err) {
+    toast('Falha ao salvar: ' + (err.message || err), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Salvar'; }
+  }
+}
+
+async function toggleFuncionarioStatus(f) {
+  const status = String(f.status || 'ATIVO').toUpperCase();
+  const novo = status === 'ATIVO' ? 'INATIVO' : 'ATIVO';
+  const verbo = novo === 'ATIVO' ? 'reativar' : 'desativar';
+  if (!confirm(`Deseja ${verbo} ${f.nome || f.usuario}?`)) return;
+
+  try {
+    if (novo === 'INATIVO') {
+      // soft-delete
+      await apiPost('removerFuncionario', { usuario: f.usuario });
+    } else {
+      await apiPost('atualizarFuncionario', {
+        usuarioOriginal: f.usuario,
+        usuario: f.usuario,
+        nome: f.nome,
+        email: f.email || '',
+        telefone: f.telefone || '',
+        status: 'ATIVO',
+        apps: Array.isArray(f.apps) ? f.apps : [],
+      });
+    }
+    toast(`Funcionário ${verbo === 'desativar' ? 'desativado' : 'reativado'}`, 'success');
+    await loadData();
+    renderFuncionarios();
+  } catch (err) {
+    toast('Falha: ' + (err.message || err), 'error');
+  }
+}
+
+// ===========================================================================
+// 22. QUOTA — solicitar aumento
+// ===========================================================================
+function openQuotaModal() {
+  if (!dom.modalQuota || !dom.formQuota) return;
+
+  dom.formQuota.reset();
+  const k = calcKPIs();
+  if (dom.quotaAtualInfo) dom.quotaAtualInfo.textContent = String(k.quotaLimite || '—');
+
+  // Sugere +5 da atual
+  const inp = dom.formQuota.querySelector('#quotaSolicitada');
+  if (inp) inp.value = (k.quotaLimite || 5) + 5;
+
+  dom.modalQuota.hidden = false;
+  dom.modalQuota.setAttribute('aria-hidden', 'false');
+}
+
+function closeQuotaModal() {
+  if (!dom.modalQuota) return;
+  dom.modalQuota.hidden = true;
+  dom.modalQuota.setAttribute('aria-hidden', 'true');
+}
+
+async function submitQuotaForm(e) {
+  e.preventDefault();
+  const form = dom.formQuota;
+  if (!form) return;
+
+  const quotaSolicitada = parseInt(form.querySelector('#quotaSolicitada').value, 10);
+  const justificativa = form.querySelector('#quotaJustificativa').value.trim();
+
+  if (!Number.isFinite(quotaSolicitada) || quotaSolicitada < 1 || quotaSolicitada > 500) {
+    toast('Quota solicitada inválida (1-500)', 'error'); return;
+  }
+  if (justificativa.length < 10) {
+    toast('Justificativa muito curta (min. 10 caracteres)', 'error'); return;
+  }
+
+  const k = calcKPIs();
+  if (quotaSolicitada <= (k.quotaLimite || 0)) {
+    toast('A quota solicitada deve ser maior que a atual', 'warning'); return;
+  }
+
+  const btn = form.querySelector('button[type="submit"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
+
+  try {
+    await apiPost('solicitarAumentoQuota', {
+      quotaSolicitada,
+      justificativa,
+    });
+    toast('Solicitação enviada. Aguarde aprovação.', 'success');
+    closeQuotaModal();
+  } catch (err) {
+    toast('Falha ao enviar: ' + (err.message || err), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Enviar solicitação'; }
+  }
+}
+
+// ===========================================================================
+// 23. EXPORTS — CSV / PDF
+// ===========================================================================
+function _csvEscape(v) {
+  if (v === null || v === undefined) return '';
+  const s = String(v);
+  if (/[",\n;]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+function _downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 200);
+}
+
+function _getCurrentEventsForExport() {
+  const tab = state.activeTab;
+  const items = getFilteredEvents()
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  let columns = [];
+  let rows = [];
+
+  if (tab === 'logs') {
+    columns = ['Quando', 'Aplicativo', 'Usuário', 'Tipo', 'Status', 'Mensagem', 'Dispositivo'];
+    rows = items.map(l => [
+      fmtDateTime(l.timestamp),
+      l.aplicativo || '',
+      l.usuario || '',
+      String(l.tipoLog || '').toUpperCase(),
+      String(l.status || 'ABERTO').toUpperCase(),
+      l.mensagemErro || '',
+      l.dispositivo || '',
+    ]);
+  } else if (tab === 'auth') {
+    columns = ['Quando', 'Usuário', 'Aplicativo', 'Resultado', 'IP', 'User-Agent'];
+    rows = items.map(a => {
+      const sucesso = !/falha|erro|false/i.test(String(a.sucesso ?? a.resultado ?? ''));
+      return [
+        fmtDateTime(a.timestamp),
+        a.usuario || '',
+        a.aplicativo || '',
+        sucesso ? 'SUCESSO' : 'FALHA',
+        a.ip || '',
+        a.userAgent || '',
+      ];
+    });
+  } else if (tab === 'sessoes') {
+    columns = ['Início', 'Usuário', 'Aplicativo', 'Status', 'Dispositivo', 'IP'];
+    rows = items.map(s => {
+      const ativa = String(s.status||'').toUpperCase() === 'ATIVA' || s.online;
+      return [
+        fmtDateTime(s.timestamp || s.inicio),
+        s.usuario || '',
+        s.aplicativo || '',
+        ativa ? 'ONLINE' : 'OFFLINE',
+        s.dispositivo || '',
+        s.ip || '',
+      ];
+    });
+  }
+
+  return { columns, rows, tab };
+}
+
+function exportCSV() {
+  const { columns, rows, tab } = _getCurrentEventsForExport();
+  if (!rows.length) { toast('Nada para exportar', 'warning'); return; }
+
+  const lines = [
+    columns.map(_csvEscape).join(','),
+    ...rows.map(r => r.map(_csvEscape).join(',')),
+  ];
+  // BOM para Excel reconhecer UTF-8
+  const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  _downloadBlob(blob, `eventos-${tab}-${ts}.csv`);
+  toast('CSV exportado', 'success');
+}
+
+function exportPDF() {
+  const { columns, rows, tab } = _getCurrentEventsForExport();
+  if (!rows.length) { toast('Nada para exportar', 'warning'); return; }
+
+  // jsPDF é carregado via UMD em window.jspdf
+  const jsPDFCtor = window.jspdf?.jsPDF;
+  if (!jsPDFCtor) { toast('jsPDF não carregado', 'error'); return; }
+
+  const doc = new jsPDFCtor({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+  const brand = state.data.branding || {};
+  const title = `${brand.nomeFantasia || 'Painel'} — ${tab.toUpperCase()}`;
+
+  doc.setFontSize(14);
+  doc.text(title, 40, 40);
+  doc.setFontSize(9);
+  doc.setTextColor(120);
+  doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')} · ${rows.length} registros`, 40, 56);
+
+  if (typeof doc.autoTable === 'function') {
+    doc.autoTable({
+      head: [columns],
+      body: rows,
+      startY: 70,
+      styles: { fontSize: 8, cellPadding: 4, overflow: 'linebreak' },
+      headStyles: { fillColor: [37, 99, 235], textColor: 255 },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      margin: { left: 40, right: 40 },
+    });
+  } else {
+    // Fallback simples se autoTable não estiver presente
+    let y = 80;
+    doc.setFontSize(9);
+    rows.slice(0, 60).forEach(r => {
+      doc.text(r.map(c => String(c).slice(0, 30)).join(' | '), 40, y);
+      y += 14;
+      if (y > 540) { doc.addPage(); y = 40; }
+    });
+  }
+
+  const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  doc.save(`eventos-${tab}-${ts}.pdf`);
+  toast('PDF exportado', 'success');
+}
+
+// ===========================================================================
+// 24. PATCH no loadData → renderFuncionarios após cada ciclo
+// ===========================================================================
+const _origLoadData = loadData;
+window.loadData = async function patchedLoadData() {
+  await _origLoadData();
+  try { renderFuncionarios(); } catch (e) { console.warn('renderFuncionarios:', e); }
+};
+// Substitui referência local também
+// (a referência exportada em window.__clientApp.loadData continua apontando
+//  para a original; quem depender pode chamar window.loadData)
+
+// ===========================================================================
+// 25. BIND EVENTS — parte 2 (funcionários, quota, exports)
+// ===========================================================================
+function bindEventsPart2() {
+  // Solicitar quota
+  if (dom.btnSolicitarQuota) dom.btnSolicitarQuota.addEventListener('click', openQuotaModal);
+
+  // Modal funcionário
+  if (dom.btnNovoFuncionario) {
+    dom.btnNovoFuncionario.addEventListener('click', () => openFuncionarioModal(null));
+  }
+  if (dom.formFuncionario) dom.formFuncionario.addEventListener('submit', submitFuncionarioForm);
+
+  // Modal quota
+  if (dom.formQuota) dom.formQuota.addEventListener('submit', submitQuotaForm);
+
+  // Busca de funcionários
+  if (dom.funcSearch) {
+    let to;
+    dom.funcSearch.addEventListener('input', () => {
+      clearTimeout(to);
+      to = setTimeout(() => renderFuncionarios(), 200);
+    });
+  }
+
+  // Fechar modais (X, backdrop, botões data-close)
+  [dom.modalFuncionario, dom.modalQuota].forEach(modal => {
+    if (!modal) return;
+    modal.addEventListener('click', (e) => {
+      if (e.target.closest('[data-close], .modal__backdrop, .modal__close')) {
+        modal.hidden = true;
+        modal.setAttribute('aria-hidden', 'true');
+      }
+    });
+  });
+
+  // ESC fecha modais abertos
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    [dom.modalFuncionario, dom.modalQuota].forEach(m => {
+      if (m && !m.hidden) {
+        m.hidden = true;
+        m.setAttribute('aria-hidden', 'true');
+      }
+    });
+  });
+
+  // Exports
+  if (dom.btnExportCsv) dom.btnExportCsv.addEventListener('click', exportCSV);
+  if (dom.btnExportPdf) dom.btnExportPdf.addEventListener('click', exportPDF);
+}
+
+// ===========================================================================
+// 26. BOOT FINAL — substitui o initBase da parte 1
+// ===========================================================================
+function initFull() {
+  // Tema
+  loadTheme();
+
+  // Token / user
+  state.token = localStorage.getItem(CONFIG.STORAGE_KEYS.TOKEN);
+  try {
+    const userJson = localStorage.getItem(CONFIG.STORAGE_KEYS.USER);
+    state.user = userJson ? JSON.parse(userJson) : null;
+  } catch { state.user = null; }
+
+  if (dom.userName) {
+    dom.userName.textContent = state.user?.nome || state.user?.usuario || 'Usuário';
+  }
+
+  // Range default
+  state.range = dom.rangeSelect?.value || '24h';
+
+  // Branding placeholder
+  applyBranding(state.data.branding);
+
+  // Bindings
+  bindEvents();
+  bindEventsPart2();
+
+  // Carga inicial + auto-refresh
+  loadData()
+    .then(() => { renderFuncionarios(); })
+    .finally(() => startAutoRefresh());
+}
+
+// Remove o listener da parte 1 e instala o boot completo
+window.removeEventListener('DOMContentLoaded', initBase);
+
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', initFull);
+} else {
+  // DOM já pronto (parte 1 já rodou initBase) — só completa
+  bindEventsPart2();
+  renderFuncionarios();
+}
