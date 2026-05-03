@@ -2248,3 +2248,18 @@ body.pronto {
 .detail__actions { margin-top: 4px; }
 .detail__actions .btn--block { width: 100%; }
 .detail__empty { color: var(--text-secondary, #64748b); text-align: center; padding: 32px; }
+
+
+/* Status pill — estados */
+.status-pill[data-state="loading"] .status-pill__dot { background: #f59e0b; box-shadow: 0 0 0 2px rgba(245,158,11,0.2); animation: pulse 1.4s ease-in-out infinite; }
+.status-pill[data-state="online"]  .status-pill__dot { background: #10b981; box-shadow: 0 0 0 2px rgba(16,185,129,0.2); }
+.status-pill[data-state="error"]   .status-pill__dot { background: #dc2626; box-shadow: 0 0 0 2px rgba(220,38,38,0.2); }
+.status-pill[data-state="loading"] .status-pill__label { color: #f59e0b; }
+.status-pill[data-state="online"]  .status-pill__label { color: #10b981; }
+.status-pill[data-state="error"]   .status-pill__label { color: #dc2626; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+
