@@ -2414,3 +2414,45 @@ body[data-portal="admin"] .modal {
 
 /* Esconde quando o modal está aberto (não atrapalhar UI) */
 body:has(.modal:not([hidden])) .fab-novo-cliente { display: none; }
+
+
+/* Adicione isso ao seu CSS global para garantir que bordas e paddings não aumentem o tamanho final dos elementos */
+* {
+    box-sizing: border-box;
+}
+
+/* Garanta que o container principal do formulário não ultrapasse a tela */
+.seu-container-do-formulario {
+    width: 100%;
+    max-width: 100vw;
+    padding: 0 15px; /* Um respiro nas laterais para não colar na borda do celular */
+    overflow-x: hidden; 
+}
+
+/* Garanta que os inputs se comportem bem */
+input, select {
+    width: 100%;
+    max-width: 100%;
+}
+
+input, select {
+    height: 38px; /* Diminui a altura padrão da caixa de texto */
+    padding: 8px 12px; /* Reduz o espaço interno (cima/baixo e lados) */
+    font-size: 14px; /* Opcional: diminui um pouco a fonte se necessário */
+}
+
+/* A div que envolve o label e o input (ex: a div que segura "Razão social" e o input abaixo) */
+.form-group { 
+    margin-bottom: 12px; /* Diminui o espaço em branco entre cada bloco de pergunta */
+}
+
+input, select {
+    height: 38px; /* Diminui a altura padrão da caixa de texto */
+    padding: 8px 12px; /* Reduz o espaço interno (cima/baixo e lados) */
+    font-size: 14px; /* Opcional: diminui um pouco a fonte se necessário */
+}
+
+/* A div que envolve o label e o input (ex: a div que segura "Razão social" e o input abaixo) */
+.form-group { 
+    margin-bottom: 12px; /* Diminui o espaço em branco entre cada bloco de pergunta */
+}
