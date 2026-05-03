@@ -1301,12 +1301,14 @@ function buildErrorState() {
 }
 
 // ============================================================================
+// ============================================================================
 // 13. DETAIL DRAWER + [GM-04] Resolver Log
+// Estratégia X: gera HTML interno via template em #detailDrawerBody
 // ============================================================================
 function openDetailDrawer(kind, data) {
   if (!dom.detailDrawer || !data) return;
 
-  const kbMatch = (kind === 'log') ? findPatternMatch(data.mensagemErro)
+  const kbMatch = (kind === 'log')  ? findPatternMatch(data.mensagemErro)
                 : (kind === 'auth') ? findPatternMatch(data.detalhes)
                 : null;
 
@@ -1353,124 +1355,179 @@ async function actionResolverLog(logData) {
 function populateDetailDrawer(kind, data, kbMatch) {
   const titleMap = { log: 'Detalhe do log', auth: 'Detalhe de autenticação', session: 'Detalhe da sessão' };
   if (dom.detailDrawerTitle) dom.detailDrawerTitle.textContent = titleMap[kind] || 'Detalhe do evento';
-  if (dom.detailDrawerSubtitle) {
-    dom.detailDrawerSubtitle.textContent = formatAbsoluteTime(data.timestamp || data.inicioSessao || '');
+
+  const body = dom.detailDrawerBody;
+  if (!body) return;
+
+  let html = '';
+  if (kind === 'log')          html = _buildLogDetailHTML(data, kbMatch);
+  else if (kind === 'auth')    html = _buildAuthDetailHTML(data, kbMatch);
+  else if (kind === 'session') html = _buildSessionDetailHTML(data);
+  else                         html = '<p class="detail__empty">Tipo desconhecido.</p>';
+
+  body.innerHTML = html;
+
+  // Bind do botão "Marcar Resolvido" (só logs ABERTO + admin)
+  const resolveBtn = body.querySelector('#gm-resolve-btn');
+  if (resolveBtn) {
+    resolveBtn.addEventListener('click', () => actionResolverLog(data));
   }
+}
 
-  // [GM-04] Limpar botão injetado anteriormente
-  const btnAntigo = document.getElementById('gm-resolve-btn');
-  if (btnAntigo) btnAntigo.remove();
+// ----------------------------------------------------------------------------
+// Builders por tipo
+// ----------------------------------------------------------------------------
+function _buildLogDetailHTML(log, kbMatch) {
+  const status      = String(log.status || 'ABERTO').toUpperCase();
+  const isOpen      = status !== 'RESOLVIDO';
+  const sev         = String(log.tipoLog || 'INFO').toUpperCase();
+  const sevColor    = sev === 'ERRO' ? '#dc2626' : sev === 'ALERTA' ? '#f59e0b' : '#3b82f6';
+  const statusColor = isOpen ? '#dc2626' : '#10b981';
+  const ts          = formatAbsoluteTime(log.timestamp);
+  const cliente     = getNomeCliente(log.idCliente);
+  const app         = log.aplicativo || '—';
+  const usuario     = log.usuario || '—';
+  const dispositivo = log.dispositivo || '—';
+  const mensagem    = _esc(log.mensagemErro || '(sem mensagem)');
 
-  if (dom.detailMeta) {
-    dom.detailMeta.innerHTML = '';
-    const rows = [];
-
-    if (kind === 'log') {
-      const sev = String(data.tipoLog || '').toUpperCase();
-      rows.push(['Severidade', buildSevPill(sev)]);
-
-      // [GM-04] Dados de Resolução
-      const sts = String(data.status || 'ABERTO').toUpperCase();
-      rows.push(['Status', sts === 'RESOLVIDO' ? buildSevPillRaw(sts, 'success') : buildSevPillRaw(sts, 'alerta')]);
-      if (data.resolvidoPor) rows.push(['Resolvido por', data.resolvidoPor]);
-      if (data.resolucao)    rows.push(['Resolução', data.resolucao]);
-
-      rows.push(['Cliente',    getNomeCliente(data.idCliente)]);
-      rows.push(['Aplicativo', data.aplicativo || '—']);
-      rows.push(['Usuário',    data.usuario || '—']);
-      rows.push(['Dispositivo',data.dispositivo || '—']);
-      rows.push(['Timestamp',  formatAbsoluteTime(data.timestamp)]);
-
-      // [GM-04] Injeta botão "Marcar Resolvido" se aplicável
-      if (sts !== 'RESOLVIDO' && data._rowIdx && dom.detailCopyBtn) {
-        const btn = document.createElement('button');
-        btn.id = 'gm-resolve-btn';
-        btn.className = 'btn btn--primary btn--sm';
-        btn.style.marginLeft = 'auto';
-        btn.textContent = 'Marcar Resolvido';
-        btn.onclick = () => actionResolverLog(data);
-        dom.detailCopyBtn.parentElement.appendChild(btn);
-      }
-
-    } else if (kind === 'auth') {
-      const tipo = String(data.tipoEvento || '').toUpperCase();
-      const sevClass = tipo === 'LOGIN_SUCESSO' ? 'success'
-                     : tipo === 'LOGIN_FALHA'   ? 'fail'
-                     : tipo === 'SESSAO_EXPIRADA' ? 'alerta' : 'info';
-      rows.push(['Evento',     buildSevPillRaw(tipo.toLowerCase(), sevClass)]);
-      rows.push(['Cliente',    getNomeCliente(data.idCliente)]);
-      rows.push(['Aplicativo', data.aplicativo || '—']);
-      rows.push(['Usuário',    data.usuario || '—']);
-      rows.push(['Dispositivo',data.dispositivo || '—']);
-      rows.push(['Timestamp',  formatAbsoluteTime(data.timestamp)]);
-    } else {
-      rows.push(['Status',     buildSevPillRaw('online', 'success')]);
-      rows.push(['Cliente',    getNomeCliente(data.idCliente)]);
-      rows.push(['Aplicativo', data.aplicativo || '—']);
-      rows.push(['Usuário',    data.usuario || '—']);
-      rows.push(['Dispositivo',data.dispositivo || '—']);
-      rows.push(['Início',     formatAbsoluteTime(data.inicioSessao)]);
-      rows.push(['Último ping',relativeTime(data.ultimoPing)]);
-      rows.push(['Duração',    formatDuration(data.inicioSessao)]);
-    }
-
-    const frag = document.createDocumentFragment();
-    rows.forEach(([key, val]) => {
-      const k = document.createElement('span');
-      k.className = 'detail-meta__key';
-      k.textContent = key;
-      const v = document.createElement('span');
-      v.className = 'detail-meta__val';
-      if (val instanceof HTMLElement) v.appendChild(val);
-      else v.textContent = val;
-      frag.appendChild(k);
-      frag.appendChild(v);
-    });
-    dom.detailMeta.appendChild(frag);
-  }
-
-  if (dom.detailMessage) {
-    const msg = (kind === 'log')    ? (data.mensagemErro || '(sem mensagem)')
-              : (kind === 'auth')   ? (data.detalhes     || '(sem detalhes)')
-              : `Sessão ativa há ${formatDuration(data.inicioSessao)}. Último ping: ${relativeTime(data.ultimoPing)}.`;
-    dom.detailMessage.textContent = msg;
-  }
-
-  if (dom.detailKbWrap) {
-    if (kbMatch) {
-      dom.detailKbWrap.hidden = false;
-      if (dom.detailKbId)      dom.detailKbId.textContent = kbMatch.id;
-      if (dom.detailKbCat)     dom.detailKbCat.textContent = kbMatch.categoria;
-      if (dom.detailKbSev) {
-        dom.detailKbSev.textContent = kbMatch.severidade;
-        dom.detailKbSev.className = 'kb-suggestion__sev kb-suggestion__sev--' +
-          kbMatch.severidade.toLowerCase();
-      }
-      if (dom.detailKbTitle)   dom.detailKbTitle.textContent = kbMatch.titulo;
-      if (dom.detailKbSolucao) dom.detailKbSolucao.textContent = kbMatch.solucao;
-    } else {
-      dom.detailKbWrap.hidden = true;
+  // Histórico
+  let historicoHtml = '';
+  if (log.historico) {
+    const linhas = String(log.historico).split('\n').filter(Boolean);
+    if (linhas.length) {
+      historicoHtml = `
+        <section class="detail__section">
+          <h3 class="detail__section-title">Histórico</h3>
+          <ul class="detail__history">
+            ${linhas.map(l => `<li>${_esc(l)}</li>`).join('')}
+          </ul>
+        </section>`;
     }
   }
 
-  if (dom.detailMetaFoot) {
-    dom.detailMetaFoot.textContent = kbMatch
-      ? `Padrão reconhecido: ${kbMatch.id}`
-      : 'Nenhum padrão da Knowledge Base reconhecido para este evento.';
-  }
+  // Bloco de resolução (se já resolvido)
+  const resolucaoHtml = (!isOpen && (log.resolvidoPor || log.resolucao)) ? `
+    <section class="detail__section detail__section--resolved">
+      <h3 class="detail__section-title">Resolução</h3>
+      <dl class="detail__dl">
+        ${log.resolvidoPor ? `<dt>Resolvido por</dt><dd>${_esc(log.resolvidoPor)}</dd>` : ''}
+        ${log.resolucao    ? `<dt>Notas</dt><dd>${_esc(log.resolucao)}</dd>`           : ''}
+      </dl>
+    </section>` : '';
+
+  // KB match
+  const kbHtml = kbMatch ? `
+    <section class="detail__section detail__section--kb">
+      <h3 class="detail__section-title">📚 Knowledge Base — ${_esc(kbMatch.id)} · ${_esc(kbMatch.titulo)}</h3>
+      <p class="detail__kb-cat">Categoria: <strong>${_esc(kbMatch.categoria)}</strong> · Severidade: <strong>${_esc(kbMatch.severidade)}</strong></p>
+      <p class="detail__kb-solution">${_esc(kbMatch.solucao || 'Sem sugestão.')}</p>
+    </section>` : '';
+
+  // Botão "Marcar Resolvido" (só se aberto e admin)
+  const isAdmin = (state.user?.nivel === 'admin') ||
+                  (localStorage.getItem(STORAGE_KEYS.ESCOPO) === '*');
+  const resolveBtnHtml = (isOpen && isAdmin && log._rowIdx) ? `
+    <div class="detail__actions">
+      <button type="button" class="btn btn--primary btn--block" id="gm-resolve-btn">
+        ✓ Marcar como Resolvido
+      </button>
+    </div>` : '';
+
+  return `
+    <div class="detail">
+      <header class="detail__header">
+        <span class="detail__badge" style="background:${statusColor}1a;color:${statusColor};border:1px solid ${statusColor}">${status}</span>
+        <span class="detail__badge" style="background:${sevColor}1a;color:${sevColor};border:1px solid ${sevColor}">${sev}</span>
+      </header>
+
+      <section class="detail__section">
+        <dl class="detail__dl">
+          <dt>Quando</dt><dd>${_esc(ts)}</dd>
+          <dt>Cliente</dt><dd>${_esc(cliente)}</dd>
+          <dt>Aplicativo</dt><dd>${_esc(app)}</dd>
+          <dt>Usuário</dt><dd>${_esc(usuario)}</dd>
+          <dt>Dispositivo</dt><dd>${_esc(dispositivo)}</dd>
+        </dl>
+      </section>
+
+      <section class="detail__section">
+        <h3 class="detail__section-title">Mensagem</h3>
+        <pre class="detail__message">${mensagem}</pre>
+      </section>
+
+      ${kbHtml}
+      ${historicoHtml}
+      ${resolucaoHtml}
+      ${resolveBtnHtml}
+    </div>
+  `;
 }
 
-function buildSevPill(sev) {
-  const cls = sev === 'ERRO' ? 'erro' : sev === 'ALERTA' ? 'alerta' : 'info';
-  return buildSevPillRaw(sev.toLowerCase(), cls);
+function _buildAuthDetailHTML(ev, kbMatch) {
+  const tipo   = String(ev.tipoEvento || '—').toUpperCase();
+  const isFail = /FALHA|FAIL|EXPIRAD/i.test(tipo);
+  const cor    = isFail ? '#dc2626' : tipo === 'LOGIN_SUCESSO' ? '#10b981' : '#3b82f6';
+  const det    = ev.detalhes ? `
+    <section class="detail__section">
+      <h3 class="detail__section-title">Detalhes</h3>
+      <p class="detail__message">${_esc(ev.detalhes)}</p>
+    </section>` : '';
+  const kbHtml = kbMatch ? `
+    <section class="detail__section detail__section--kb">
+      <h3 class="detail__section-title">📚 Knowledge Base — ${_esc(kbMatch.id)} · ${_esc(kbMatch.titulo)}</h3>
+      <p class="detail__kb-solution">${_esc(kbMatch.solucao || '')}</p>
+    </section>` : '';
+
+  return `
+    <div class="detail">
+      <header class="detail__header">
+        <span class="detail__badge" style="background:${cor}1a;color:${cor};border:1px solid ${cor}">${tipo}</span>
+      </header>
+      <section class="detail__section">
+        <dl class="detail__dl">
+          <dt>Quando</dt><dd>${_esc(formatAbsoluteTime(ev.timestamp))}</dd>
+          <dt>Cliente</dt><dd>${_esc(getNomeCliente(ev.idCliente))}</dd>
+          <dt>Aplicativo</dt><dd>${_esc(ev.aplicativo || '—')}</dd>
+          <dt>Usuário</dt><dd>${_esc(ev.usuario || '—')}</dd>
+          <dt>Dispositivo</dt><dd>${_esc(ev.dispositivo || '—')}</dd>
+        </dl>
+      </section>
+      ${det}
+      ${kbHtml}
+    </div>`;
 }
 
-function buildSevPillRaw(label, cls) {
-  const el = document.createElement('span');
-  el.className = 'detail-meta__sev detail-meta__sev--' + cls;
-  el.textContent = label;
-  return el;
+function _buildSessionDetailHTML(s) {
+  return `
+    <div class="detail">
+      <header class="detail__header">
+        <span class="detail__badge" style="background:#10b9811a;color:#10b981;border:1px solid #10b981">ONLINE</span>
+      </header>
+      <section class="detail__section">
+        <dl class="detail__dl">
+          <dt>Cliente</dt><dd>${_esc(getNomeCliente(s.idCliente))}</dd>
+          <dt>Aplicativo</dt><dd>${_esc(s.aplicativo || '—')}</dd>
+          <dt>Usuário</dt><dd>${_esc(s.usuario || '—')}</dd>
+          <dt>Dispositivo</dt><dd>${_esc(s.dispositivo || '—')}</dd>
+          <dt>Início</dt><dd>${_esc(formatAbsoluteTime(s.inicioSessao))}</dd>
+          <dt>Último ping</dt><dd>${_esc(relativeTime(s.ultimoPing))}</dd>
+          <dt>Duração</dt><dd>${_esc(formatDuration(s.inicioSessao))}</dd>
+        </dl>
+      </section>
+    </div>`;
 }
+
+// Escape HTML local (evita conflito com escapeHtml de utils.js se assinatura diferir)
+function _esc(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 
 // ============================================================================
 // 14. STATUS PILL + REFRESH BUTTON
@@ -1478,7 +1535,7 @@ function buildSevPillRaw(label, cls) {
 function updateConnectionStatus() {
   const pill = dom.connectionStatus;
   if (!pill) return;
-  const textEl = pill.querySelector('.status-pill__text');
+  const textEl = pill.querySelector('.status-pill__label'); // ← era __text, agora __label
   if (state.isLoading) {
     pill.dataset.state = 'loading';
     if (textEl) textEl.textContent = 'Sincronizando…';
@@ -1486,7 +1543,7 @@ function updateConnectionStatus() {
     pill.dataset.state = 'error';
     if (textEl) textEl.textContent = 'Erro de conexão';
   } else {
-    pill.dataset.state = 'ok';
+    pill.dataset.state = 'online'; // ← era 'ok', alinha com data-state do CSS
     if (textEl) textEl.textContent = 'Online';
   }
 }
@@ -1975,7 +2032,7 @@ function bindEvents() {
       if (ev.target.closest('[data-close]')) closeDetailDrawer();
     });
   }
-  if (dom.detailCopyBtn) {
+    if (dom.detailCopyBtn) {
     dom.detailCopyBtn.addEventListener('click', () => {
       const ctx = state.ui.detailContext;
       if (!ctx) return;
@@ -1985,18 +2042,19 @@ function bindEvents() {
         knowledgeBaseMatch: ctx.kbMatch || null
       };
       const json = JSON.stringify(payload, null, 2);
+
       const flash = (msg) => {
-        const original = dom.detailCopyBtn.querySelector('span');
-        if (!original) return;
-        const prev = original.textContent;
-        original.textContent = msg;
-        setTimeout(() => { original.textContent = prev; }, 1200);
+        const btn = dom.detailCopyBtn;
+        const prev = btn.textContent;
+        btn.textContent = msg;
+        btn.disabled = true;
+        setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 1200);
       };
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(json).then(
-          () => flash('Copiado ✓'),
-          () => flash('Falhou ✗')
-        );
+
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(json)
+          .then(() => flash('Copiado ✓'))
+          .catch(() => flash('Falhou ✗'));
       } else {
         const ta = document.createElement('textarea');
         ta.value = json;
@@ -2010,6 +2068,7 @@ function bindEvents() {
       }
     });
   }
+
 
   // Atalhos de teclado: r / 1 / 2 / 3 / / / t / c / Esc
   document.addEventListener('keydown', (ev) => {
