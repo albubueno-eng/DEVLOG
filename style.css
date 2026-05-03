@@ -2561,6 +2561,52 @@ body:has(.modal:not([hidden])) .fab-novo-cliente { display: none; }
 }
 
 
+/* =============================================================================
+   PATCH — Garante que modal apareça quando hidden é removido
+   ============================================================================= */
+.modal {
+  display: flex !important;
+}
+.modal[hidden] {
+  display: none !important;
+}
+
+/* Se você usa .modal__panel em vez de .modal__dialog, espelha as regras */
+.modal__panel {
+  position: relative;
+  background: var(--color-bg-card, #fff);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  width: 100%;
+  max-width: 440px;
+  max-height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal__panel > form {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.modal__panel > form > .form__body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 12px 16px;
+}
+
+@media (max-width: 640px) {
+  .modal__panel {
+    max-width: 100%;
+    max-height: calc(100vh - 24px);
+  }
+}
+
+
 
 /* 1. Limita a altura máxima do painel e prepara o Flexbox */
 .modal__panel {
