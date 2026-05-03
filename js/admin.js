@@ -2379,3 +2379,39 @@ if (document.readyState === 'loading') {
 } else {
   init();
 }
+
+function _sanitizarLogoUrl(url) {
+  if (!url) return '';
+  const u = String(url).trim();
+  if (!u) return '';
+  const lower = u.toLowerCase();
+
+  // bloqueia esquemas perigosos
+  if (lower.indexOf('javascript:') === 0) return '';
+  if (lower.indexOf('vbscript:')   === 0) return '';
+  if (lower.indexOf('file:')       === 0) return '';
+
+  // aceita https:// OU data:image/(png|jpeg|jpg|svg+xml|webp);base64,
+  const isHttps = lower.indexOf('https://') === 0;
+  const isDataImg = /^data:image\/(png|jpe?g|svg\+xml|webp);base64,/i.test(u);
+  if (!isHttps && !isDataImg) return '';
+
+  // tamanho max para data URI (~700KB base64 = ~500KB binário)
+  if (isDataImg && u.length > 720000) return '';
+
+  // se for https, valida extensão
+  if (isHttps) {
+    const semQuery = lower.split('?')[0].split('#')[0];
+    const exts = (CONFIG.LOGO_EXTENSOES_VALIDAS || ['png','jpg','jpeg','svg','webp']);
+    let ok = false;
+    for (let i = 0; i < exts.length; i++) {
+      if (semQuery.endsWith('.' + exts[i])) { ok = true; break; }
+    }
+    if (!ok) return '';
+  }
+
+  // bloqueia chars perigosos no rendering (só para https; data já é validado pelo regex)
+  if (isHttps && /["'<>`]/.test(u)) return '';
+
+  return u;
+}
