@@ -2263,3 +2263,117 @@ body.pronto {
   50%      { opacity: 0.4; }
 }
 
+
+/* =============================================================================
+   PATCH — Modal "Novo Cliente" (e demais modais) com altura máxima + scroll
+   Cole no final do style.css. Resolve overflow vertical em telas pequenas.
+   ============================================================================= */
+
+/* Container do modal: ocupa a viewport e centraliza o dialog */
+body[data-portal="admin"] .modal,
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  overflow-y: auto;          /* permite scroll do container se a tela for muito pequena */
+}
+.modal[hidden] { display: none; }
+
+/* Backdrop atrás do dialog */
+.modal__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+  z-index: -1;
+}
+
+/* Dialog: limita altura, ativa flex column, esconde overflow no shell */
+.modal__dialog {
+  position: relative;
+  background: var(--color-bg-card, #fff);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  width: 100%;
+  max-width: 560px;
+  max-height: 90vh;          /* 🔑 trava a altura */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;          /* garante que header/footer sticky fiquem dentro */
+}
+
+/* Header fixo no topo */
+.modal__header {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+  background: var(--color-bg-card, #fff);
+}
+
+/* Body com scroll interno */
+.modal__body,
+.modal form,
+.modal .form {
+  flex: 1 1 auto;
+  overflow-y: auto;          /* 🔑 só o corpo rola */
+  min-height: 0;             /* fix flexbox: permite que o filho encolha */
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Quando o <form> é o body direto (caso do "Novo Cliente"), garantir scroll */
+.modal__dialog > form {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;          /* o form vira o shell; o conteúdo interno rola */
+}
+.modal__dialog > form > *:not(.modal__footer):not(.modal__header) {
+  /* nada — deixa fluir */
+}
+.modal__dialog > form > .form__body,
+.modal__dialog > form > .form__fields,
+.modal__dialog > form > .form__content {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 14px 20px;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Footer fixo no rodapé */
+.modal__footer {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--color-border, #e5e7eb);
+  background: var(--color-bg-soft, #f9fafb);
+}
+
+/* Mobile: ocupa quase toda a tela */
+@media (max-width: 640px) {
+  .modal { padding: 8px; }
+  .modal__dialog {
+    max-width: 100%;
+    max-height: 96vh;
+    border-radius: 8px;
+  }
+  .modal__header,
+  .modal__footer { padding: 12px 14px; }
+}
+
+/* Tela muito baixa (laptop pequeno / janela curta) */
+@media (max-height: 700px) {
+  .modal__dialog { max-height: 94vh; }
+  .modal__header { padding: 10px 18px; }
+  .modal__footer { padding: 10px 18px; }
+}
