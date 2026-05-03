@@ -2416,6 +2416,152 @@ body[data-portal="admin"] .modal {
 /* Esconde quando o modal está aberto (não atrapalhar UI) */
 body:has(.modal:not([hidden])) .fab-novo-cliente { display: none; }
 
+/* =============================================================================
+   FORMULÁRIO INTELIGENTE — validação inline + logo uploader + color picker
+   ============================================================================= */
+
+.form--smart .required {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+/* Estado de erro no campo */
+.form__field.is-invalid input,
+.form__field.is-invalid select,
+.form__field.is-invalid textarea {
+  border-color: #dc2626 !important;
+  background: #fef2f2 !important;
+}
+.form__field.is-invalid label {
+  color: #dc2626;
+}
+.form__field.is-valid input:not([type="color"]),
+.form__field.is-valid select,
+.form__field.is-valid textarea {
+  border-color: #10b981 !important;
+}
+
+.form__error {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: #dc2626;
+  font-weight: 500;
+  line-height: 1.3;
+}
+.form__error[hidden] { display: none; }
+
+.form__error::before {
+  content: "⚠ ";
+  margin-right: 2px;
+}
+
+/* Hint discreto */
+.form__hint {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--color-text-muted, #6b7280);
+  line-height: 1.3;
+}
+
+/* Logo uploader */
+.logo-uploader {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.logo-uploader__preview {
+  width: 56px;
+  height: 56px;
+  border: 2px dashed var(--color-border, #d1d5db);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--color-bg-soft, #f9fafb);
+  flex-shrink: 0;
+}
+.logo-uploader__preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 4px;
+}
+.logo-uploader__placeholder {
+  font-size: 9px;
+  color: var(--color-text-muted, #9ca3af);
+  text-align: center;
+  padding: 4px;
+}
+.logo-uploader__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.btn--small {
+  padding: 4px 10px !important;
+  font-size: 11px !important;
+}
+
+/* Color picker */
+.color-picker-wrap {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.color-picker-wrap input[type="color"] {
+  width: 40px !important;
+  height: 32px !important;
+  padding: 2px !important;
+  border-radius: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.color-picker-wrap input[type="text"] {
+  flex: 1;
+  font-family: ui-monospace, monospace;
+  text-transform: lowercase;
+}
+
+/* Botão com spinner */
+.btn__spinner {
+  display: inline-block;
+  margin-left: 6px;
+  animation: spin 1s linear infinite;
+}
+.btn__spinner[hidden] { display: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.btn[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Banner de erro geral no topo do form */
+.form__banner {
+  margin: 0 16px 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.form__banner[data-type="error"] {
+  background: rgba(220, 38, 38, 0.1);
+  color: #b91c1c;
+  border-left: 3px solid #dc2626;
+}
+.form__banner[data-type="success"] {
+  background: rgba(16, 185, 129, 0.1);
+  color: #047857;
+  border-left: 3px solid #10b981;
+}
+
+
+
 /* 1. Limita a altura máxima do painel e prepara o Flexbox */
 .modal__panel {
   position: relative;
