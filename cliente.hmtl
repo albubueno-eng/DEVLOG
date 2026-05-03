@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#2563eb" id="themeColorMeta" />
+  <title>Painel do Cliente</title>
+
+  <!-- ========== GUARD DE ROTEAMENTO (executa antes do CSS) ========== -->
+  <script>
+    (function () {
+      try {
+        var token  = localStorage.getItem('gm_token');
+        var escopo = localStorage.getItem('gm_escopo');
+        if (!token) {
+          window.location.replace('./login.html');
+          return;
+        }
+        // Admin (escopo '*') não acessa o portal do cliente
+        if (escopo === '*') {
+          window.location.replace('./index.html');
+          return;
+        }
+      } catch (e) {
+        window.location.replace('./login.html');
+      }
+    })();
+  </script>
+
+  <!-- PWA -->
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icons/icon-192.png" type="image/png" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="./style.css" />
+  <link rel="stylesheet" href="./style-client.css" />
+
+  <!-- jsPDF para export PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.0/jspdf.plugin.autotable.min.js" defer></script>
+</head>
+
+<body data-theme="light" data-portal="client">
+
+  <!-- ====================================================================
+       APP SHELL
+       ================================================================ -->
+  <div class="app-shell">
+
+    <!-- ============== SIDEBAR ============== -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar__brand">
+        <img id="brandLogo" class="sidebar__logo" alt="Logo" src="./icons/icon-192.png" />
+        <div class="sidebar__brand-text">
+          <strong id="brandName">Carregando…</strong>
+          <small id="brandSubtitle">Painel do Cliente</small>
+        </div>
+      </div>
+
+      <nav class="sidebar__nav">
+        <button class="nav-item is-active" data-section="dashboard" type="button">
+          <span class="nav-item__icon">📊</span>
+          <span class="nav-item__label">Dashboard</span>
+        </button>
+        <button class="nav-item" data-section="eventos" type="button">
+          <span class="nav-item__icon">📋</span>
+          <span class="nav-item__label">Eventos</span>
+          <span class="nav-item__badge" id="navBadgeEventos" hidden>0</span>
+        </button>
+        <button class="nav-item" data-section="funcionarios" type="button">
+          <span class="nav-item__icon">👥</span>
+          <span class="nav-item__label">Funcionários</span>
+        </button>
+      </nav>
+
+      <div class="sidebar__footer">
+        <div class="status-pill" id="systemStatus" data-state="loading">
+          <span class="status-pill__dot"></span>
+          <span class="status-pill__label">Conectando…</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ============== MAIN ============== -->
+    <main class="main">
+
+      <!-- ============== TOPBAR ============== -->
+      <header class="topbar">
+        <div class="topbar__title">
+          <h1 id="pageTitle">Dashboard</h1>
+          <small id="pageSubtitle">Visão geral do seu ambiente</small>
+        </div>
+
+        <div class="topbar__actions">
+          <button class="btn btn--ghost" id="btnSolicitarQuota" type="button" title="Solicitar aumento de quota">
+            ➕ Quota
+          </button>
+          <button class="btn btn--ghost" id="btnRefresh" type="button" title="Atualizar (R)">
+            🔄
+          </button>
+          <button class="btn btn--ghost" id="btnTheme" type="button" title="Alternar tema">
+            🌓
+          </button>
+          <div class="user-menu">
+            <button class="btn btn--ghost" id="btnUserMenu" type="button">
+              <span id="userName">…</span> ▾
+            </button>
+            <div class="user-menu__dropdown" id="userDropdown" hidden>
+              <button type="button" id="btnLogout">🚪 Sair</button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- ============== SEÇÃO: DASHBOARD ============== -->
+      <section class="section is-active" id="section-dashboard" data-section="dashboard">
+
+        <!-- KPIs -->
+        <div class="kpi-grid">
+          <div class="kpi-card" data-tone="info">
+            <div class="kpi-card__label">Funcionários ativos</div>
+            <div class="kpi-card__value" id="kpiFuncAtivos">—</div>
+            <div class="kpi-card__hint" id="kpiFuncQuota">— de —</div>
+          </div>
+          <div class="kpi-card" data-tone="success">
+            <div class="kpi-card__label">Online agora</div>
+            <div class="kpi-card__value" id="kpiOnline">—</div>
+            <div class="kpi-card__hint">Sessões ativas</div>
+          </div>
+          <div class="kpi-card" data-tone="danger">
+            <div class="kpi-card__label">Erros (24h)</div>
+            <div class="kpi-card__value" id="kpiErros24h">—</div>
+            <div class="kpi-card__hint" id="kpiErrosAbertos">— em aberto</div>
+          </div>
+          <div class="kpi-card" data-tone="warning">
+            <div class="kpi-card__label">Logins falhos (24h)</div>
+            <div class="kpi-card__value" id="kpiLoginsFalhos">—</div>
+            <div class="kpi-card__hint">Tentativas inválidas</div>
+          </div>
+          <div class="kpi-card" data-tone="info">
+            <div class="kpi-card__label">Auth events (24h)</div>
+            <div class="kpi-card__value" id="kpiAuth24h">—</div>
+            <div class="kpi-card__hint" id="kpiTaxaSucesso">— sucesso</div>
+          </div>
+          <div class="kpi-card" data-tone="info">
+            <div class="kpi-card__label">Apps monitorados</div>
+            <div class="kpi-card__value" id="kpiApps">—</div>
+            <div class="kpi-card__hint">Aplicativos ativos</div>
+          </div>
+        </div>
+
+        <!-- Live strip -->
+        <div class="live-strip" id="liveStrip">
+          <div class="live-strip__header">
+            <h3>Atividade recente</h3>
+            <span class="live-strip__indicator">● ao vivo</span>
+          </div>
+          <div class="live-strip__body" id="liveStripBody">
+            <div class="empty">Aguardando atividade…</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============== SEÇÃO: EVENTOS ============== -->
+      <section class="section" id="section-eventos" data-section="eventos">
+
+        <div class="toolbar">
+          <div class="tabs" role="tablist">
+            <button class="tab is-active" data-tab="logs" type="button" role="tab">
+              Logs <span class="tab__count" id="tabCountLogs">0</span>
+            </button>
+            <button class="tab" data-tab="auth" type="button" role="tab">
+              Autenticação <span class="tab__count" id="tabCountAuth">0</span>
+            </button>
+            <button class="tab" data-tab="sessoes" type="button" role="tab">
+              Sessões <span class="tab__count" id="tabCountSessoes">0</span>
+            </button>
+          </div>
+
+          <div class="toolbar__filters">
+            <input
+              type="search"
+              class="input"
+              id="searchInput"
+              placeholder="🔍 Buscar (usuário, app, mensagem…)"
+              autocomplete="off"
+            />
+
+            <div class="pills" id="severityPills" data-show-for="logs">
+              <button class="pill" data-severity="ERRO" type="button">Erros <span id="pillCountErro">0</span></button>
+              <button class="pill" data-severity="ALERTA" type="button">Alertas <span id="pillCountAlerta">0</span></button>
+              <button class="pill" data-severity="INFO" type="button">Info <span id="pillCountInfo">0</span></button>
+            </div>
+
+            <select class="input input--select" id="rangeSelect" title="Intervalo de tempo">
+              <option value="1h">Última 1h</option>
+              <option value="24h" selected>Últimas 24h</option>
+              <option value="7d">7 dias</option>
+              <option value="30d">30 dias</option>
+              <option value="all">Tudo</option>
+            </select>
+
+            <button class="btn btn--ghost" id="btnExportCsv" type="button">⬇ CSV</button>
+            <button class="btn btn--ghost" id="btnExportPdf" type="button">⬇ PDF</button>
+          </div>
+        </div>
+
+        <div class="events-list" id="eventsList" role="list">
+          <div class="empty">Carregando eventos…</div>
+        </div>
+      </section>
+
+      <!-- ============== SEÇÃO: FUNCIONÁRIOS ============== -->
+      <section class="section" id="section-funcionarios" data-section="funcionarios">
+
+        <div class="toolbar">
+          <div class="toolbar__title">
+            <h2>Funcionários</h2>
+            <small id="funcQuotaInfo">— de — utilizados</small>
+          </div>
+
+          <div class="toolbar__filters">
+            <input
+              type="search"
+              class="input"
+              id="funcSearch"
+              placeholder="🔍 Buscar funcionário…"
+              autocomplete="off"
+            />
+            <button class="btn btn--primary" id="btnNovoFuncionario" type="button">
+              ➕ Novo Funcionário
+            </button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="data-table" id="funcionariosTable">
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>Usuário</th>
+                <th>Apps</th>
+                <th>Status</th>
+                <th>Último acesso</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="funcionariosTbody">
+              <tr><td colspan="6" class="empty">Carregando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ====================================================================
+       DRAWER: DETALHE DE EVENTO (simplificado, sem KB / sem resolve)
+       ================================================================ -->
+  <aside class="drawer" id="detailDrawer" hidden aria-hidden="true">
+    <header class="drawer__header">
+      <h3 id="detailDrawerTitle">Detalhe</h3>
+      <button class="drawer__close" id="detailDrawerCloseBtn" type="button" data-close aria-label="Fechar">✕</button>
+    </header>
+    <div class="drawer__body" id="detailDrawerBody">
+      <div class="empty">Selecione um evento</div>
+    </div>
+    <footer class="drawer__footer">
+      <button class="btn btn--ghost" id="detailDrawerCopyBtn" type="button">📋 Copiar JSON</button>
+    </footer>
+  </aside>
+
+  <!-- ====================================================================
+       MODAL: NOVO / EDITAR FUNCIONÁRIO
+       ================================================================ -->
+  <div class="modal" id="modalFuncionario" hidden aria-hidden="true">
+    <div class="modal__backdrop" data-close></div>
+    <div class="modal__dialog" role="dialog" aria-labelledby="modalFuncTitle">
+      <header class="modal__header">
+        <h3 id="modalFuncTitle">Novo Funcionário</h3>
+        <button class="modal__close" type="button" data-close aria-label="Fechar">✕</button>
+      </header>
+
+      <form id="formFuncionario" class="form">
+        <input type="hidden" id="funcId" name="funcId" />
+
+        <div class="form__row">
+          <label class="form__field">
+            <span>Nome completo *</span>
+            <input type="text" id="funcNome" name="nome" required maxlength="120" />
+          </label>
+          <label class="form__field">
+            <span>Usuário (login) *</span>
+            <input type="text" id="funcUsuario" name="usuario" required maxlength="60" pattern="[a-zA-Z0-9._-]+" />
+          </label>
+        </div>
+
+        <div class="form__row">
+          <label class="form__field">
+            <span>Email</span>
+            <input type="email" id="funcEmail" name="email" maxlength="120" />
+          </label>
+          <label class="form__field">
+            <span>Telefone</span>
+            <input type="tel" id="funcTelefone" name="telefone" maxlength="20" />
+          </label>
+        </div>
+
+        <div class="form__row">
+          <label class="form__field">
+            <span>Senha <small id="funcSenhaHint">(min. 8 caracteres)</small></span>
+            <input type="password" id="funcSenha" name="senha" minlength="8" maxlength="60" />
+          </label>
+          <label class="form__field">
+            <span>Apps liberados *</span>
+            <div class="checkbox-group">
+              <label><input type="checkbox" name="apps" value="ponto" /> Ponto</label>
+              <label><input type="checkbox" name="apps" value="estoque" /> Estoque</label>
+            </div>
+          </label>
+        </div>
+
+        <div class="form__row">
+          <label class="form__field form__field--full">
+            <span>Status</span>
+            <select id="funcStatus" name="status">
+              <option value="ATIVO" selected>Ativo</option>
+              <option value="INATIVO">Inativo</option>
+            </select>
+          </label>
+        </div>
+
+        <footer class="modal__footer">
+          <button class="btn btn--ghost" type="button" data-close>Cancelar</button>
+          <button class="btn btn--primary" type="submit" id="btnSalvarFuncionario">Salvar</button>
+        </footer>
+      </form>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       MODAL: SOLICITAR AUMENTO DE QUOTA
+       ================================================================ -->
+  <div class="modal" id="modalQuota" hidden aria-hidden="true">
+    <div class="modal__backdrop" data-close></div>
+    <div class="modal__dialog" role="dialog" aria-labelledby="modalQuotaTitle">
+      <header class="modal__header">
+        <h3 id="modalQuotaTitle">Solicitar aumento de quota</h3>
+        <button class="modal__close" type="button" data-close aria-label="Fechar">✕</button>
+      </header>
+
+      <form id="formQuota" class="form">
+        <p class="form__hint">
+          Quota atual: <strong id="quotaAtualInfo">—</strong> funcionários.
+          Solicite um aumento e nossa equipe avaliará.
+        </p>
+
+        <div class="form__row">
+          <label class="form__field">
+            <span>Quota solicitada *</span>
+            <input type="number" id="quotaSolicitada" name="quotaSolicitada" min="1" max="500" required />
+          </label>
+        </div>
+
+        <div class="form__row">
+          <label class="form__field form__field--full">
+            <span>Justificativa *</span>
+            <textarea id="quotaJustificativa" name="justificativa" rows="4" required maxlength="500"
+              placeholder="Ex.: Contratação de 10 novos colaboradores no setor de logística…"></textarea>
+          </label>
+        </div>
+
+        <footer class="modal__footer">
+          <button class="btn btn--ghost" type="button" data-close>Cancelar</button>
+          <button class="btn btn--primary" type="submit">Enviar solicitação</button>
+        </footer>
+      </form>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       TOAST CONTAINER
+       ================================================================ -->
+  <div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+  <!-- ====================================================================
+       APP MODULE
+       ================================================================ -->
+  <script type="module" src="./js/client.js"></script>
+
+</body>
+</html>
