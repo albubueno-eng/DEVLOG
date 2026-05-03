@@ -2018,20 +2018,22 @@ function bindEvents() {
     });
   }
 
-  // Capacity drawer
+    // Capacity drawer
   if (dom.capacityBtn) dom.capacityBtn.addEventListener('click', openCapacityDrawer);
   if (dom.capacityDrawer) {
     dom.capacityDrawer.addEventListener('click', (ev) => {
-      if (ev.target.closest('[data-close]')) closeCapacityDrawer();
+      if (ev.target.closest('[data-close], .drawer__close')) closeCapacityDrawer();
     });
   }
 
-  // Detail drawer
+
+    // Detail drawer (X button + backdrop click)
   if (dom.detailDrawer) {
     dom.detailDrawer.addEventListener('click', (ev) => {
-      if (ev.target.closest('[data-close]')) closeDetailDrawer();
+      if (ev.target.closest('[data-close], .drawer__close')) closeDetailDrawer();
     });
   }
+
     if (dom.detailCopyBtn) {
     dom.detailCopyBtn.addEventListener('click', () => {
       const ctx = state.ui.detailContext;
