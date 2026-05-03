@@ -2909,3 +2909,112 @@ if (document.readyState === 'loading') {
 
   console.log('[FAB] injetado e ativo (mobile <= 768px)');
 })();
+
+/* =========================================================
+ * Monitor de Clientes – abrir e renderizar
+ * ========================================================= */
+(function initCapacityMonitor(){
+  async function fetchCapacity() {
+    const url = window.SCRIPT_URL + '?action=getCapacityMonitor&apiKey=' + encodeURIComponent(window.API_KEY);
+    const r = await fetch(url);
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || 'Falha ao carregar monitor');
+    return j.data;
+  }
+
+  function statusBadge(s) {
+    if (s === 'cheio')   return '<span class="badge badge--danger">Cheio</span>';
+    if (s === 'atencao') return '<span class="badge badge--warning">Atenção</span>';
+    return '<span class="badge badge--success">OK</span>';
+  }
+
+  function renderRow(c) {
+    const apps = Object.entries(c.apps||{}).map(([k,v])=>`<span class="chip">${k}: ${v}</span>`).join(' ') || '<span class="muted">—</span>';
+    const barColor = c.status==='cheio' ? '#dc2626' : c.status==='atencao' ? '#f59e0b' : '#10b981';
+    return `
+      <tr>
+        <td><strong>${c.nome}</strong><br><small class="muted">${c.idCliente}</small></td>
+        <td>${c.plano}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="flex:1;height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden;">
+              <div style="width:${Math.min(100,c.percentual)}%;height:100%;background:${barColor};"></div>
+            </div>
+            <span style="font-size:12px;white-space:nowrap;">${c.usados}/${c.quota} (${c.percentual}%)</span>
+          </div>
+        </td>
+        <td>${apps}</td>
+        <td>${statusBadge(c.status)}</td>
+      </tr>`;
+  }
+
+  async function openMonitor() {
+    let modal = document.getElementById('capacityMonitorModal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'capacityMonitorModal';
+      modal.className = 'modal';
+      modal.innerHTML = `
+        <div class="modal__backdrop" data-close></div>
+        <div class="modal__dialog" style="max-width:920px;">
+          <div class="modal__header">
+            <h3>📊 Monitor de Clientes</h3>
+            <button type="button" class="btn btn--ghost" data-close>✕</button>
+          </div>
+          <div class="modal__body" id="capMonBody">
+            <p class="muted">Carregando…</p>
+          </div>
+          <div class="modal__footer">
+            <button type="button" class="btn btn--ghost" data-close>Fechar</button>
+            <button type="button" class="btn btn--primary" id="capMonRefresh">🔄 Atualizar</button>
+          </div>
+        </div>`;
+      document.body.appendChild(modal);
+      modal.addEventListener('click', e => {
+        if (e.target.matches('[data-close]')) modal.hidden = true;
+      });
+      modal.querySelector('#capMonRefresh').addEventListener('click', loadAndRender);
+    }
+    modal.hidden = false;
+    await loadAndRender();
+  }
+
+  async function loadAndRender() {
+    const body = document.getElementById('capMonBody');
+    body.innerHTML = '<p class="muted">Carregando…</p>';
+    try {
+      const data = await fetchCapacity();
+      if (!data.clientes.length) {
+        body.innerHTML = '<p class="muted">Nenhum cliente cadastrado.</p>';
+        return;
+      }
+      body.innerHTML = `
+        <div class="capmon-summary" style="display:flex;gap:16px;margin-bottom:12px;">
+          <div><strong>${data.totais.clientes}</strong> clientes</div>
+          <div><strong>${data.totais.funcionarios}</strong> funcionários ativos</div>
+          <div>Capacidade: <strong>${data.totais.capacidadeTotal}</strong></div>
+        </div>
+        <table class="table" style="width:100%;font-size:13px;">
+          <thead>
+            <tr><th>Cliente</th><th>Plano</th><th>Uso</th><th>Apps</th><th>Status</th></tr>
+          </thead>
+          <tbody>${data.clientes.map(renderRow).join('')}</tbody>
+        </table>`;
+    } catch (e) {
+      console.error('[capmon]', e);
+      body.innerHTML = `<div class="form__banner" data-type="error">Erro: ${e.message}</div>`;
+    }
+  }
+
+  window.openCapacityMonitor = openMonitor;
+
+  // Delegação para qualquer botão/menu existente
+  document.addEventListener('click', e => {
+    const t = e.target.closest('[data-action="monitor-clientes"], #btnMonitorClientes, [data-section="capacity"]');
+    if (!t) return;
+    e.preventDefault();
+    openMonitor();
+  });
+  console.log('[capmon] Monitor de Clientes pronto. Use window.openCapacityMonitor() ou clique no menu.');
+})();
+
