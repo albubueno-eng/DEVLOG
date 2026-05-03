@@ -2027,8 +2027,14 @@ function bindEvents() {
     });
   }
 
-    // Capacity drawer
-  if (dom.capacityBtn) dom.capacityBtn.addEventListener('click', openCapacityDrawer);
+      // Capacity drawer
+  // if (dom.capacityBtn) dom.capacityBtn.addEventListener('click', openCapacityDrawer);  // ← DESATIVADO: substituído pelo Monitor de Clientes v3
+  if (dom.capacityDrawer) {
+    dom.capacityDrawer.addEventListener('click', (ev) => {
+      if (ev.target.closest('[data-close], .drawer__close')) closeCapacityDrawer();
+    });
+  }
+
   if (dom.capacityDrawer) {
     dom.capacityDrawer.addEventListener('click', (ev) => {
       if (ev.target.closest('[data-close], .drawer__close')) closeCapacityDrawer();
@@ -2927,32 +2933,15 @@ if (document.readyState === 'loading') {
   ].join(', ');
 
   // Auto-detecta SCRIPT_URL e API_KEY de várias fontes possíveis
-  function getCfg() {
-    const cfg = (window.CONFIG || window.AppConfig || window.ADMIN_CONFIG || {});
-    const scriptUrl =
-      window.SCRIPT_URL ||
-      window.GAS_URL ||
-      cfg.SCRIPT_URL ||
-      cfg.scriptUrl ||
-      cfg.GAS_URL ||
-      cfg.API_URL ||
-      cfg.apiUrl ||
-      (typeof SCRIPT_URL !== 'undefined' ? SCRIPT_URL : '') ||
-      '';
-    const apiKey =
-      window.API_KEY ||
-      cfg.API_KEY ||
-      cfg.apiKey ||
-      (typeof API_KEY !== 'undefined' ? API_KEY : '') ||
-      '';
-    const token =
-      localStorage.getItem('gm_token') ||
-      localStorage.getItem('godmode_token') ||
-      window.GM_TOKEN ||
-      cfg.token ||
-      '';
-    return { scriptUrl, apiKey, token };
+    function getCfg() {
+    // SCRIPT_URL e API_KEY vêm dos imports ES modules no topo deste arquivo
+    return {
+      scriptUrl: SCRIPT_URL,
+      apiKey:    API_KEY,
+      token:     localStorage.getItem(STORAGE_KEYS.TOKEN) || ''
+    };
   }
+
 
   async function fetchCapacity() {
     const { scriptUrl, apiKey, token } = getCfg();
