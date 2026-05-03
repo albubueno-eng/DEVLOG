@@ -234,10 +234,10 @@
             <p class="events-section__meta" id="logsMeta">—</p>
           </div>
 
-          <!-- Linha 2: toolbar de filtros (busca + severidade + export) -->
-          <div class="events-section__row events-section__row--toolbar">
+          <!-- Linha 2: toolbar de filtros (busca + severidade + tempo + export) -->
+          <div class="events-section__row events-section__row--toolbar" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
             <!-- Busca textual (filtra in-memory) -->
-            <div class="search-field" role="search">
+            <div class="search-field" role="search" style="flex-grow: 1;">
               <svg class="search-field__icon" width="14" height="14" viewBox="0 0 24 24"
                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                    stroke-linejoin="round" aria-hidden="true">
@@ -257,6 +257,52 @@
                 </svg>
               </button>
             </div>
+
+            <!-- Pills de severidade — só visíveis na tab Logs -->
+            <div class="severity-pills" id="severityPills" role="group"
+                 aria-label="Filtrar por gravidade" data-tab-scope="logs">
+              <button class="pill pill--erro is-active" type="button"
+                      data-severity="ERRO" aria-pressed="true">
+                <span class="pill__dot" aria-hidden="true"></span>
+                <span class="pill__label">Erros</span>
+                <span class="pill__count" id="pillCountErro">0</span>
+              </button>
+              <button class="pill pill--alerta is-active" type="button"
+                      data-severity="ALERTA" aria-pressed="true">
+                <span class="pill__dot" aria-hidden="true"></span>
+                <span class="pill__label">Alertas</span>
+                <span class="pill__count" id="pillCountAlerta">0</span>
+              </button>
+              <button class="pill pill--info is-active" type="button"
+                      data-severity="INFO" aria-pressed="true">
+                <span class="pill__dot" aria-hidden="true"></span>
+                <span class="pill__label">Infos</span>
+                <span class="pill__count" id="pillCountInfo">0</span>
+              </button>
+            </div>
+
+            <!-- [GM-08] Filtro Temporal -->
+            <div class="time-filter" style="margin-left: auto;">
+              <select id="timeFilterSelect" class="form-input" style="padding: 6px 12px; font-size: 13px; border-radius: 6px; width: auto; height: 32px; background: rgba(255,255,255,0.05); color: var(--text-main); border: 1px solid rgba(255,255,255,0.1); cursor: pointer; outline: none;">
+                <option value="all" style="background: var(--bg-dark);">Todo o período</option>
+                <option value="24h" style="background: var(--bg-dark);">Últimas 24h</option>
+                <option value="7d" style="background: var(--bg-dark);">Últimos 7 dias</option>
+                <option value="30d" style="background: var(--bg-dark);">Últimos 30 dias</option>
+              </select>
+            </div>
+
+            <!-- Exportar CSV -->
+            <button class="btn btn--ghost btn--small" id="exportCsvBtn" type="button"
+                    aria-label="Exportar visíveis como CSV" title="Exportar CSV">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              <span>Exportar</span>
+            </button>
+          </div>
 
             <!-- Pills de severidade — só visíveis na tab Logs -->
             <div class="severity-pills" id="severityPills" role="group"
