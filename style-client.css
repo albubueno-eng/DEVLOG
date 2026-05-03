@@ -1,1 +1,905 @@
 
+/* =============================================================================
+   STYLE-CLIENT.CSS — Portal do Cliente (white-label)
+   Complementa style.css. Carregado APÓS o style.css principal.
+   ============================================================================= */
+
+/* -----------------------------------------------------------------------------
+   1. VARIÁVEIS DE BRANDING (white-label)
+   O client.js sobrescreve --brand-primary em runtime via:
+     document.documentElement.style.setProperty('--brand-primary', cor);
+   ----------------------------------------------------------------------------- */
+:root {
+  --brand-primary:        #2563eb;
+  --brand-primary-hover:  #1d4ed8;
+  --brand-primary-soft:   rgba(37, 99, 235, 0.10);
+  --brand-primary-ring:   rgba(37, 99, 235, 0.35);
+  --brand-on-primary:     #ffffff;
+}
+
+/* Aplica o brand no portal cliente (sem afetar admin) */
+body[data-portal="client"] {
+  --color-accent:         var(--brand-primary);
+  --color-accent-hover:   var(--brand-primary-hover);
+  --color-accent-soft:    var(--brand-primary-soft);
+}
+
+body[data-portal="client"] .btn--primary {
+  background: var(--brand-primary);
+  color: var(--brand-on-primary);
+  border-color: var(--brand-primary);
+}
+body[data-portal="client"] .btn--primary:hover {
+  background: var(--brand-primary-hover);
+  border-color: var(--brand-primary-hover);
+}
+body[data-portal="client"] .nav-item.is-active {
+  background: var(--brand-primary-soft);
+  color: var(--brand-primary);
+  border-left-color: var(--brand-primary);
+}
+body[data-portal="client"] .tab.is-active {
+  color: var(--brand-primary);
+  border-bottom-color: var(--brand-primary);
+}
+body[data-portal="client"] .pill.is-active {
+  background: var(--brand-primary-soft);
+  color: var(--brand-primary);
+  border-color: var(--brand-primary-ring);
+}
+body[data-portal="client"] a { color: var(--brand-primary); }
+
+/* -----------------------------------------------------------------------------
+   2. SIDEBAR — branding do cliente
+   ----------------------------------------------------------------------------- */
+body[data-portal="client"] .sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 14px;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+body[data-portal="client"] .sidebar__logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  object-fit: contain;
+  background: #fff;
+  padding: 4px;
+  border: 1px solid var(--color-border, #e5e7eb);
+  flex-shrink: 0;
+}
+body[data-portal="client"] .sidebar__brand-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+body[data-portal="client"] .sidebar__brand-text strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text, #111827);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body[data-portal="client"] .sidebar__brand-text small {
+  font-size: 11px;
+  color: var(--color-text-muted, #6b7280);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Nav items */
+body[data-portal="client"] .sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 8px;
+  gap: 2px;
+  flex: 1;
+}
+body[data-portal="client"] .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  border-left: 3px solid transparent;
+  border-radius: 6px;
+  color: var(--color-text, #374151);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+body[data-portal="client"] .nav-item:hover {
+  background: var(--color-bg-hover, #f3f4f6);
+}
+body[data-portal="client"] .nav-item__icon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+}
+body[data-portal="client"] .nav-item__label {
+  flex: 1;
+}
+body[data-portal="client"] .nav-item__badge {
+  background: #dc2626;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 10px;
+  min-width: 18px;
+  text-align: center;
+}
+
+/* Status pill (idêntico ao admin, mas garantido aqui) */
+body[data-portal="client"] .sidebar__footer {
+  padding: 12px 14px;
+  border-top: 1px solid var(--color-border, #e5e7eb);
+}
+body[data-portal="client"] .status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--color-bg-soft, #f3f4f6);
+  font-size: 12px;
+  font-weight: 500;
+}
+body[data-portal="client"] .status-pill__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f59e0b;
+}
+body[data-portal="client"] .status-pill[data-state="loading"] .status-pill__dot { background: #f59e0b; animation: pulse 1.4s infinite; }
+body[data-portal="client"] .status-pill[data-state="online"]  .status-pill__dot { background: #10b981; }
+body[data-portal="client"] .status-pill[data-state="error"]   .status-pill__dot { background: #dc2626; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+
+/* -----------------------------------------------------------------------------
+   3. SEÇÕES — só uma visível por vez
+   ----------------------------------------------------------------------------- */
+body[data-portal="client"] .section { display: none; }
+body[data-portal="client"] .section.is-active { display: block; }
+
+/* -----------------------------------------------------------------------------
+   4. KPI GRID — tons coloridos por categoria
+   ----------------------------------------------------------------------------- */
+body[data-portal="client"] .kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+body[data-portal="client"] .kpi-card {
+  background: var(--color-bg-card, #fff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 10px;
+  padding: 14px 16px;
+  position: relative;
+  overflow: hidden;
+}
+body[data-portal="client"] .kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 3px;
+  background: var(--color-text-muted, #9ca3af);
+}
+body[data-portal="client"] .kpi-card[data-tone="success"]::before { background: #10b981; }
+body[data-portal="client"] .kpi-card[data-tone="danger"]::before  { background: #dc2626; }
+body[data-portal="client"] .kpi-card[data-tone="warning"]::before { background: #f59e0b; }
+body[data-portal="client"] .kpi-card[data-tone="info"]::before    { background: var(--brand-primary); }
+
+body[data-portal="client"] .kpi-card__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-muted, #6b7280);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+body[data-portal="client"] .kpi-card__value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--color-text, #111827);
+  line-height: 1.1;
+}
+body[data-portal="client"] .kpi-card__hint {
+  font-size: 12px;
+  color: var(--color-text-muted, #6b7280);
+  margin-top: 4px;
+}
+
+/* -----------------------------------------------------------------------------
+   5. LIVE STRIP
+   ----------------------------------------------------------------------------- */
+body[data-portal="client"] .live-strip {
+  background: var(--color-bg-card, #fff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 10px;
+  margin-bottom: 20px;
+}
+body[data-portal="client"] .live-strip__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+body[data-portal="client"] .live-strip__header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+body[data-portal="client"] .live-strip__indicator {
+  font-size: 11px;
+  color: #10b981;
+  font-weight: 600;
+  animation: pulse 2s infinite;
+}
+body[data-portal="client"] .live-strip__body {
+  padding: 8px 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* -----------------------------------------------------------------------------
+   6. TOOLBAR (eventos + funcionários)
+   ----------------------------------------------------------------------------- */
+body[data-portal="client"] .toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+body[data-portal="client"] .toolbar__title h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+body[data-portal="client"] .toolbar__title small {
+  font-size: 12px;
+  color: var(--color-text-muted, #6b7280);
+}
+body[data-portal="client"] .toolbar__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Tabs */
+body[data-portal="client"] .tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid transparent;
+}
+body[data-portal="client"] .tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 8px 14px;
+  font-size: 14px;
+  color: var(--color-text-muted, #6b7280);
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+body[data-portal="client"] .tab:hover { color: var(--color-text, #111827); }
+body[data-portal="client"] .tab__count {
+  display: inline-block;
+  background: var(--color-bg-soft, #f3f4f6);
+  border-radius: 10px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+/* Severity pills */
+body[data-portal="client"] .pills {
+  display: inline-flex;
+  gap: 6px;
+}
+body[data-portal="client"] .pill {
+  background: var(--color-bg-soft, #f3f4f6);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all .15s;
+}
+body[data-portal="client"] .pill[data-severity="ERRO"].is-active {
+  background: rgba(220, 38, 38, 0.1);
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.35);
+}
+body[data-portal="client"] .pill[data-severity="ALERTA"].is-active {
+  background: rgba(245, 158, 11, 0.1);
+  color: #b45309;
+  border-color: rgba(245, 158, 11, 0.35);
+}
+body[data-portal="client"] .pill[data-severity="INFO"].is-active {
+  background: var(--brand-primary-soft);
+  color: var(--brand-primary);
+  border-color: var(--brand-primary-ring);
+}
+
+/* -----------------------------------------------------------------------------
+   7. EVENTS LIST
+   ----------------------------------------------------------------------------- */
+body[data-portal="client"] .events-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+body[data-portal="client"] .event-item {
+  display: grid;
+  grid-template-columns: 90px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--color-bg-card, #fff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color .15s, box-shadow .15s;
+}
+body[data-portal="client"] .event-item:hover {
+  border-color: var(--brand-primary-ring);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+}
+body[data-portal="client"] .event-item__time {
+  font-size: 11px;
+  color: var(--color-text-muted, #6b7280);
+  font-variant-numeric: tabular-nums;
+}
+body[data-portal="client"] .event-item__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+body[data-portal="client"] .event-item__title {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body[data-portal="client"] .event-item__sub {
+  font-size: 11px;
+  color: var(--color-text-muted, #6b7280);
+}
+body[data-portal="client"] .event-item__badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+body[data-portal="client"] .event-item__badge[data-tone="ERRO"]    { background: rgba(220,38,38,0.12); color: #dc2626; }
+body[data-portal="client"] .event-item__badge[data-tone="ALERTA"]  { background: rgba(245,158,11,0.12); color: #b45309; }
+body[data-portal="client"] .event-item__badge[data-tone="INFO"]    { background: var(--brand-primary-soft); color: var(--brand-primary); }
+body[data-portal="client"] .event-item__badge[data-tone="SUCESSO"] { background: rgba(16,185,129,0.12); color: #047857; }
+body[data-portal="client"] .event-item__badge[data-tone="FALHA"]   { background: rgba(220,38,38,0.12); color: #dc2626; }
+
+/* -----------------------------------------------------------------------------
+   8. TABELA DE FUNCIONÁRIOS
+   ----------------------------------------------------------------------------- */
+body[data-portal="client"] .table-wrap {
+  overflow-x: auto;
+  background: var(--color-bg-card, #fff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 10px;
+}
+body[data-portal="client"] .data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+body[data-portal="client"] .data-table thead th {
+  background: var(--color-bg-soft, #f9fafb);
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-muted, #6b7280);
+  font-weight: 600;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+  white-space: nowrap;
+}
+body[data-portal="client"] .data-table tbody td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border, #f3f4f6);
+  vertical-align: middle;
+}
+body[data-portal="client"] .data-table tbody tr:last-child td { border-bottom: none; }
+body[data-portal="client"] .data-table tbody tr:hover { background: var(--color-bg-hover, #f9fafb); }
+
+body[data-portal="client"] .data-table .empty {
+  text-align: center;
+  padding: 32px;
+  color: var(--color-text-muted, #6b7280);
+}
+
+/* Status badge na tabela */
+body[data-portal="client"] .badge-status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+body[data-portal="client"] .badge-status[data-status="ATIVO"]   { background: rgba(16,185,129,0.12); color: #047857; }
+body[data-portal="client"] .badge-status[data-status="INATIVO"] { background: rgba(107,114,128,0.15); color: #4b5563; }
+
+/* Apps chips na tabela */
+body[data-portal="client"] .app-chip {
+  display: inline-block;
+  background: var(--brand-primary-soft);
+  color: var(--brand-primary);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  margin-right: 4px;
+  text-transform: uppercase;
+}
+
+/* Action buttons na tabela */
+body[data-portal="client"] .row-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+body[data-portal="client"] .row-actions button {
+  background: transparent;
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all .15s;
+}
+body[data-portal="client"] .row-actions button:hover {
+  border-color: var(--brand-primary-ring);
+  color: var(--brand-primary);
+}
+body[data-portal="client"] .row-actions button.is-danger:hover {
+  border-color: rgba(220,38,38,0.4);
+  color: #dc2626;
+}
+
+/* -----------------------------------------------------------------------------
+   9. MODAIS (funcionário + quota)
+   ----------------------------------------------------------------------------- */
+body[data-portal="client"] .modal[hidden] { display: none; }
+body[data-portal="client"] .modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+body[data-portal="client"] .modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(2px);
+}
+body[data-portal="client"] .modal__dialog {
+  position: relative;
+  background: var(--color-bg-card, #fff);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  width: 100%;
+  max-width: 560px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+body[data-portal="client"] .modal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+body[data-portal="client"] .modal__header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}
+body[data-portal="client"] .modal__close {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  color: var(--color-text-muted, #6b7280);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+body[data-portal="client"] .modal__close:hover {
+  background: var(--color-bg-soft, #f3f4f6);
+  color: var(--color-text, #111827);
+}
+body[data-portal="client"] .modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--color-border, #e5e7eb);
+  background: var(--color-bg-soft, #f9fafb);
+}
+
+/* -----------------------------------------------------------------------------
+   10. FORMULÁRIOS
+   ----------------------------------------------------------------------------- */
+body[data-portal="client"] .form {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+body[data-portal="client"] .form__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  padding: 14px 20px 0;
+}
+body[data-portal="client"] .form__row:last-of-type { padding-bottom: 14px; }
+body[data-portal="client"] .form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+body[data-portal="client"] .form__field--full { grid-column: 1 / -1; }
+body[data-portal="client"] .form__field span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text, #374151);
+}
+body[data-portal="client"] .form__field span small {
+  font-weight: 400;
+  color: var(--color-text-muted, #6b7280);
+  margin-left: 4px;
+}
+body[data-portal="client"] .form__field input,
+body[data-portal="client"] .form__field select,
+body[data-portal="client"] .form__field textarea {
+  padding: 8px 10px;
+  border: 1px solid var(--color-border, #d1d5db);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  background: #fff;
+  transition: border-color .15s, box-shadow .15s;
+}
+body[data-portal="client"] .form__field input:focus,
+body[data-portal="client"] .form__field select:focus,
+body[data-portal="client"] .form__field textarea:focus {
+  outline: none;
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px var(--brand-primary-ring);
+}
+body[data-portal="client"] .form__field textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+body[data-portal="client"] .form__hint {
+  margin: 0;
+  padding: 14px 20px;
+  font-size: 13px;
+  color: var(--color-text-muted, #6b7280);
+  background: var(--color-bg-soft, #f9fafb);
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+body[data-portal="client"] .checkbox-group {
+  display: flex;
+  gap: 14px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border, #d1d5db);
+  border-radius: 6px;
+  background: #fff;
+}
+body[data-portal="client"] .checkbox-group label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+/* -----------------------------------------------------------------------------
+   11. DRAWER DE DETALHE (override leve para portal cliente)
+   ----------------------------------------------------------------------------- */
+body[data-portal="client"] .drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(480px, 92vw);
+  background: var(--color-bg-card, #fff);
+  box-shadow: -4px 0 16px rgba(0,0,0,0.1);
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(0);
+  transition: transform .25s ease;
+}
+body[data-portal="client"] .drawer[hidden] { display: none; }
+body[data-portal="client"] .drawer__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+body[data-portal="client"] .drawer__header h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+}
+body[data-portal="client"] .drawer__close {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  color: var(--color-text-muted, #6b7280);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+body[data-portal="client"] .drawer__close:hover {
+  background: var(--color-bg-soft, #f3f4f6);
+}
+body[data-portal="client"] .drawer__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px;
+}
+body[data-portal="client"] .drawer__footer {
+  padding: 12px 18px;
+  border-top: 1px solid var(--color-border, #e5e7eb);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Conteúdo do detail (versão simplificada) */
+body[data-portal="client"] .detail__header {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+body[data-portal="client"] .detail__badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  background: var(--color-bg-soft, #f3f4f6);
+  color: var(--color-text, #374151);
+}
+body[data-portal="client"] .detail__badge[data-tone="ERRO"]   { background: rgba(220,38,38,0.12); color: #dc2626; }
+body[data-portal="client"] .detail__badge[data-tone="ALERTA"] { background: rgba(245,158,11,0.12); color: #b45309; }
+body[data-portal="client"] .detail__badge[data-tone="INFO"]   { background: var(--brand-primary-soft); color: var(--brand-primary); }
+body[data-portal="client"] .detail__badge[data-tone="ABERTO"]    { background: rgba(220,38,38,0.12); color: #dc2626; }
+body[data-portal="client"] .detail__badge[data-tone="RESOLVIDO"] { background: rgba(16,185,129,0.12); color: #047857; }
+
+body[data-portal="client"] .detail__section {
+  margin-bottom: 16px;
+}
+body[data-portal="client"] .detail__section h4 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-muted, #6b7280);
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+body[data-portal="client"] .detail__dl {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 4px 12px;
+  font-size: 13px;
+}
+body[data-portal="client"] .detail__dl dt {
+  color: var(--color-text-muted, #6b7280);
+  font-weight: 500;
+}
+body[data-portal="client"] .detail__dl dd {
+  margin: 0;
+  color: var(--color-text, #111827);
+  word-break: break-word;
+}
+body[data-portal="client"] .detail__message {
+  background: var(--color-bg-soft, #f9fafb);
+  border-left: 3px solid var(--brand-primary);
+  padding: 10px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+body[data-portal="client"] .detail__payload {
+  background: #1f2937;
+  color: #e5e7eb;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+/* -----------------------------------------------------------------------------
+   12. USER MENU DROPDOWN
+   ----------------------------------------------------------------------------- */
+body[data-portal="client"] .user-menu {
+  position: relative;
+}
+body[data-portal="client"] .user-menu__dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: var(--color-bg-card, #fff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  min-width: 160px;
+  z-index: 50;
+  overflow: hidden;
+}
+body[data-portal="client"] .user-menu__dropdown[hidden] { display: none; }
+body[data-portal="client"] .user-menu__dropdown button {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  text-align: left;
+  background: transparent;
+  border: none;
+  font-size: 13px;
+  cursor: pointer;
+}
+body[data-portal="client"] .user-menu__dropdown button:hover {
+  background: var(--color-bg-soft, #f3f4f6);
+}
+
+/* -----------------------------------------------------------------------------
+   13. TOAST CONTAINER (caso style.css não cubra)
+   ----------------------------------------------------------------------------- */
+body[data-portal="client"] .toast-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+body[data-portal="client"] .toast {
+  background: #1f2937;
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  pointer-events: auto;
+  animation: toast-in .25s ease;
+  max-width: 360px;
+}
+body[data-portal="client"] .toast[data-type="success"] { background: #059669; }
+body[data-portal="client"] .toast[data-type="error"]   { background: #dc2626; }
+body[data-portal="client"] .toast[data-type="warning"] { background: #d97706; }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* -----------------------------------------------------------------------------
+   14. EMPTY STATE
+   ----------------------------------------------------------------------------- */
+body[data-portal="client"] .empty {
+  text-align: center;
+  padding: 32px 20px;
+  color: var(--color-text-muted, #9ca3af);
+  font-size: 13px;
+}
+
+/* -----------------------------------------------------------------------------
+   15. RESPONSIVE — mobile (< 768px)
+   ----------------------------------------------------------------------------- */
+@media (max-width: 767px) {
+  body[data-portal="client"] .app-shell {
+    flex-direction: column;
+  }
+  body[data-portal="client"] .sidebar {
+    width: 100%;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border, #e5e7eb);
+  }
+  body[data-portal="client"] .sidebar__nav {
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 8px;
+  }
+  body[data-portal="client"] .nav-item {
+    flex-shrink: 0;
+    border-left: none;
+    border-bottom: 3px solid transparent;
+  }
+  body[data-portal="client"] .nav-item.is-active {
+    border-left-color: transparent;
+    border-bottom-color: var(--brand-primary);
+  }
+  body[data-portal="client"] .sidebar__footer { display: none; }
+
+  body[data-portal="client"] .topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  body[data-portal="client"] .topbar__actions {
+    flex-wrap: wrap;
+  }
+  body[data-portal="client"] .form__row {
+    grid-template-columns: 1fr;
+  }
+  body[data-portal="client"] .event-item {
+    grid-template-columns: 1fr auto;
+  }
+  body[data-portal="client"] .event-item__time {
+    grid-column: 1 / -1;
+    order: -1;
+  }
+}
+
+/* -----------------------------------------------------------------------------
+   16. DARK THEME (herda do body[data-theme="dark"] do style.css)
+   ----------------------------------------------------------------------------- */
+body[data-portal="client"][data-theme="dark"] .sidebar__logo {
+  background: rgba(255,255,255,0.05);
+}
+body[data-portal="client"][data-theme="dark"] .form__field input,
+body[data-portal="client"][data-theme="dark"] .form__field select,
+body[data-portal="client"][data-theme="dark"] .form__field textarea,
+body[data-portal="client"][data-theme="dark"] .checkbox-group {
+  background: #111827;
+  color: #f3f4f6;
+  border-color: #374151;
+}
+body[data-portal="client"][data-theme="dark"] .modal__dialog {
+  background: #1f2937;
+}
+body[data-portal="client"][data-theme="dark"] .modal__footer,
+body[data-portal="client"][data-theme="dark"] .form__hint {
+  background: #111827;
+}
