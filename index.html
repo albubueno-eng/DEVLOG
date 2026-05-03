@@ -256,76 +256,188 @@
         <button type="button" class="modal__close" id="newClientCloseBtn" aria-label="Fechar">✕</button>
       </header>
 
-      <form id="newClientForm" class="modal__body" novalidate>
-        <p class="modal__formError" id="newClientFormError" style="display:none"></p>
+     <form id="formNovoCliente" class="form form--smart" novalidate>
+  <div class="form__body">
 
-        <div class="field">
-          <label class="field__label" for="ncIdCliente">idCliente *</label>
-          <input class="field__input" id="ncIdCliente" name="idCliente" required pattern="[a-z0-9_-]{2,32}" placeholder="ex: crv" />
-          <small class="field__hint">Letras minúsculas, números, _ ou -. Sem espaços.</small>
-        </div>
-
-        <div class="field">
-          <label class="field__label" for="ncNome">Razão social *</label>
-          <input class="field__input" id="ncNome" name="nome" required placeholder="ex: CRV Engenharia LTDA" />
-        </div>
-
-        <div class="field">
-          <label class="field__label" for="ncNomeFantasia">Nome fantasia</label>
-          <input class="field__input" id="ncNomeFantasia" name="nomeFantasia" placeholder="ex: CRV" />
-        </div>
-
-        <div class="field">
-          <label class="field__label" for="ncCnpj">CNPJ</label>
-          <input class="field__input" id="ncCnpj" name="cnpj" inputmode="numeric" maxlength="18" placeholder="14 dígitos" />
-        </div>
-
-        <div class="field">
-          <label class="field__label" for="ncEmail">Email contato</label>
-          <input class="field__input" id="ncEmail" name="email" type="email" placeholder="contato@empresa.com" />
-        </div>
-
-        <div class="field">
-          <label class="field__label" for="ncTelefone">Telefone</label>
-          <input class="field__input" id="ncTelefone" name="telefone" placeholder="(11) 99999-9999" />
-        </div>
-
-        <div class="field">
-          <label class="field__label" for="ncPlano">Plano</label>
-          <select class="field__input" id="ncPlano" name="plano">
-            <option value="starter">Starter</option>
-            <option value="pro">Pro</option>
-            <option value="enterprise">Enterprise</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label class="field__label" for="ncQuota">Quota de funcionários *</label>
-          <input class="field__input" id="ncQuota" name="quotaFuncionarios" type="number" min="1" max="1000" value="5" required />
-          <small class="field__hint">Número máximo de funcionários ativos que o cliente pode cadastrar.</small>
-        </div>
-
-        <div class="field">
-          <label class="field__label" for="ncLogo">Logo URL</label>
-          <input class="field__input" id="ncLogo" name="logoUrl" type="url" placeholder="https://exemplo.com/logo.png" />
-          <small class="field__hint">Apenas https:// e .png/.jpg/.svg/.webp. Máx 500KB recomendado.</small>
-        </div>
-
-        <div class="field">
-          <label class="field__label" for="ncCor">Cor primária</label>
-          <input class="field__input" id="ncCor" name="corPrimaria" type="text" pattern="#[0-9a-fA-F]{6}" placeholder="#2C5BA0" />
-          <small class="field__hint">Hex no formato #RRGGBB. Aplicada no painel cliente.</small>
-        </div>
-      </form>
-
-      <footer class="modal__footer">
-        <button type="button" class="btn btn--ghost" id="newClientCancelBtn">Cancelar</button>
-        <button type="submit" form="newClientForm" class="btn btn--primary" id="newClientSubmitBtn">
-          <span>Cadastrar</span>
-        </button>
-      </footer>
+    <!-- ID Cliente -->
+    <div class="form__field" data-field="idCliente">
+      <label for="ncIdCliente">
+        ID do cliente <span class="required">*</span>
+      </label>
+      <input
+        type="text"
+        id="ncIdCliente"
+        name="idCliente"
+        placeholder="ex: crv"
+        required
+        minlength="2"
+        maxlength="32"
+        pattern="[a-z0-9_-]{2,32}"
+        autocomplete="off"
+      />
+      <small class="form__hint">2-32 caracteres • a-z, 0-9, _ ou -</small>
+      <span class="form__error" hidden></span>
     </div>
+
+    <!-- Razão social -->
+    <div class="form__field" data-field="razaoSocial">
+      <label for="ncRazaoSocial">
+        Razão social <span class="required">*</span>
+      </label>
+      <input
+        type="text"
+        id="ncRazaoSocial"
+        name="razaoSocial"
+        placeholder="ex: CRV Engenharia LTDA"
+        required
+        minlength="3"
+        maxlength="120"
+      />
+      <span class="form__error" hidden></span>
+    </div>
+
+    <!-- Nome fantasia -->
+    <div class="form__field" data-field="nomeFantasia">
+      <label for="ncNomeFantasia">Nome fantasia</label>
+      <input
+        type="text"
+        id="ncNomeFantasia"
+        name="nomeFantasia"
+        placeholder="ex: CRV"
+        maxlength="80"
+      />
+      <span class="form__error" hidden></span>
+    </div>
+
+    <!-- CNPJ -->
+    <div class="form__field" data-field="cnpj">
+      <label for="ncCnpj">
+        CNPJ <span class="required">*</span>
+      </label>
+      <input
+        type="text"
+        id="ncCnpj"
+        name="cnpj"
+        placeholder="00.000.000/0000-00"
+        required
+        maxlength="18"
+        inputmode="numeric"
+        autocomplete="off"
+      />
+      <span class="form__error" hidden></span>
+    </div>
+
+    <!-- Email -->
+    <div class="form__field" data-field="email">
+      <label for="ncEmail">Email contato</label>
+      <input
+        type="email"
+        id="ncEmail"
+        name="email"
+        placeholder="contato@empresa.com"
+        maxlength="120"
+      />
+      <span class="form__error" hidden></span>
+    </div>
+
+    <!-- Telefone -->
+    <div class="form__field" data-field="telefone">
+      <label for="ncTelefone">Telefone</label>
+      <input
+        type="tel"
+        id="ncTelefone"
+        name="telefone"
+        placeholder="(11) 99999-9999"
+        maxlength="20"
+      />
+      <span class="form__error" hidden></span>
+    </div>
+
+    <!-- Plano -->
+    <div class="form__field" data-field="plano">
+      <label for="ncPlano">Plano</label>
+      <select id="ncPlano" name="plano">
+        <option value="starter">Starter</option>
+        <option value="pro">Pro</option>
+        <option value="enterprise">Enterprise</option>
+      </select>
+      <span class="form__error" hidden></span>
+    </div>
+
+    <!-- Quota -->
+    <div class="form__field" data-field="quotaFuncionarios">
+      <label for="ncQuota">
+        Quota de funcionários <span class="required">*</span>
+      </label>
+      <input
+        type="number"
+        id="ncQuota"
+        name="quotaFuncionarios"
+        value="5"
+        min="1"
+        max="500"
+        required
+      />
+      <small class="form__hint">Número máximo de funcionários ativos.</small>
+      <span class="form__error" hidden></span>
+    </div>
+
+    <!-- Logo (upload OU URL) -->
+    <div class="form__field" data-field="logo">
+      <label>Logo do cliente</label>
+      <div class="logo-uploader">
+        <div class="logo-uploader__preview" id="ncLogoPreview">
+          <span class="logo-uploader__placeholder">Sem logo</span>
+        </div>
+        <div class="logo-uploader__actions">
+          <button type="button" class="btn btn--ghost btn--small" id="ncLogoUploadBtn">
+            📁 Enviar PNG/JPG
+          </button>
+          <button type="button" class="btn btn--ghost btn--small" id="ncLogoRemoveBtn" hidden>
+            🗑 Remover
+          </button>
+          <input type="file" id="ncLogoFile" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden />
+        </div>
+      </div>
+      <input
+        type="url"
+        id="ncLogoUrl"
+        name="logoUrl"
+        placeholder="ou cole uma URL https://exemplo.com/logo.png"
+        maxlength="2000"
+      />
+      <small class="form__hint">PNG/JPG/SVG/WEBP • máx 500KB • ou cole uma URL.</small>
+      <span class="form__error" hidden></span>
+    </div>
+
+    <!-- Cor primária -->
+    <div class="form__field" data-field="corPrimaria">
+      <label for="ncCorPrimaria">Cor primária</label>
+      <div class="color-picker-wrap">
+        <input type="color" id="ncCorPicker" value="#2563eb" />
+        <input
+          type="text"
+          id="ncCorPrimaria"
+          name="corPrimaria"
+          placeholder="#2563eb"
+          maxlength="7"
+          pattern="^#[0-9a-fA-F]{6}$"
+        />
+      </div>
+      <span class="form__error" hidden></span>
+    </div>
+
   </div>
+
+  <footer class="modal__footer">
+    <button type="button" class="btn btn--ghost" data-close>Cancelar</button>
+    <button type="submit" class="btn btn--primary" id="ncSubmitBtn">
+      <span class="btn__label">Cadastrar cliente</span>
+      <span class="btn__spinner" hidden>⏳</span>
+    </button>
+  </footer>
+</form>
+
 
   <!-- ======================================================================
        DRAWER: CAPACITY MONITOR
