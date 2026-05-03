@@ -1339,9 +1339,12 @@ async function actionResolverLog(logData) {
   try {
     setLoading(true);
     await adminApiPost('updatelogstatus', {
-      rowIdx: logData._rowIdx,
-      novoStatus: 'RESOLVIDO',
-      resolucao: resolucao.trim()
+      // Chave composta — backend localiza a linha na planilha
+      timestamp:    logData.timestamp,
+      idCliente:    logData.idCliente,
+      mensagemErro: logData.mensagemErro,
+      novoStatus:   'RESOLVIDO',
+      resolucao:    resolucao.trim()
     });
     closeDetailDrawer();
     await loadData();
@@ -1351,6 +1354,7 @@ async function actionResolverLog(logData) {
     setLoading(false);
   }
 }
+
 
 function populateDetailDrawer(kind, data, kbMatch) {
   const titleMap = { log: 'Detalhe do log', auth: 'Detalhe de autenticação', session: 'Detalhe da sessão' };
@@ -1426,7 +1430,7 @@ function _buildLogDetailHTML(log, kbMatch) {
   // Botão "Marcar Resolvido" (só se aberto e admin)
   const isAdmin = (state.user?.nivel === 'admin') ||
                   (localStorage.getItem(STORAGE_KEYS.ESCOPO) === '*');
-  const resolveBtnHtml = (isOpen && isAdmin && log._rowIdx) ? `
+   const resolveBtnHtml = (isOpen && isAdmin) ? `
     <div class="detail__actions">
       <button type="button" class="btn btn--primary btn--block" id="gm-resolve-btn">
         ✓ Marcar como Resolvido
