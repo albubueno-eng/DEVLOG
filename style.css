@@ -2265,78 +2265,73 @@ body.pronto {
 
 
 /* =============================================================================
-   PATCH — Modal "Novo Cliente" (e demais modais) com altura máxima + scroll
-   Cole no final do style.css. Resolve overflow vertical em telas pequenas.
+   PATCH v2 — Modal "Novo Cliente": menor + scroll + responsivo
    ============================================================================= */
 
-/* Container do modal: ocupa a viewport e centraliza o dialog */
-body[data-portal="admin"] .modal,
-.modal {
+.modal,
+body[data-portal="admin"] .modal {
   position: fixed;
   inset: 0;
   z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
-  overflow-y: auto;          /* permite scroll do container se a tela for muito pequena */
+  padding: 24px;
+  overflow-y: auto;
 }
 .modal[hidden] { display: none; }
 
-/* Backdrop atrás do dialog */
 .modal__backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(2px);
   z-index: -1;
 }
 
-/* Dialog: limita altura, ativa flex column, esconde overflow no shell */
+/* 🔑 Modal menor — 480px de largura, 75vh de altura */
 .modal__dialog {
   position: relative;
   background: var(--color-bg-card, #fff);
   border-radius: 12px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   width: 100%;
-  max-width: 560px;
-  max-height: 90vh;          /* 🔑 trava a altura */
+  max-width: 480px;
+  max-height: 75vh;
   display: flex;
   flex-direction: column;
-  overflow: hidden;          /* garante que header/footer sticky fiquem dentro */
+  overflow: hidden;
 }
 
-/* Header fixo no topo */
 .modal__header {
   flex-shrink: 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
+  padding: 14px 18px;
   border-bottom: 1px solid var(--color-border, #e5e7eb);
   background: var(--color-bg-card, #fff);
 }
+.modal__header h3 {
+  font-size: 15px;
+  margin: 0;
+}
 
-/* Body com scroll interno */
 .modal__body,
 .modal form,
 .modal .form {
   flex: 1 1 auto;
-  overflow-y: auto;          /* 🔑 só o corpo rola */
-  min-height: 0;             /* fix flexbox: permite que o filho encolha */
+  overflow-y: auto;
+  min-height: 0;
   -webkit-overflow-scrolling: touch;
 }
 
-/* Quando o <form> é o body direto (caso do "Novo Cliente"), garantir scroll */
 .modal__dialog > form {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
-  overflow: hidden;          /* o form vira o shell; o conteúdo interno rola */
-}
-.modal__dialog > form > *:not(.modal__footer):not(.modal__header) {
-  /* nada — deixa fluir */
+  overflow: hidden;
 }
 .modal__dialog > form > .form__body,
 .modal__dialog > form > .form__fields,
@@ -2344,36 +2339,78 @@ body[data-portal="admin"] .modal,
   flex: 1 1 auto;
   overflow-y: auto;
   min-height: 0;
-  padding: 14px 20px;
-  -webkit-overflow-scrolling: touch;
+  padding: 12px 18px;
 }
 
-/* Footer fixo no rodapé */
 .modal__footer {
   flex-shrink: 0;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding: 14px 20px;
+  padding: 12px 18px;
   border-top: 1px solid var(--color-border, #e5e7eb);
   background: var(--color-bg-soft, #f9fafb);
 }
 
-/* Mobile: ocupa quase toda a tela */
+/* Tablet médio */
+@media (max-width: 900px) {
+  .modal__dialog { max-width: 440px; max-height: 78vh; }
+}
+
+/* Mobile */
 @media (max-width: 640px) {
   .modal { padding: 8px; }
   .modal__dialog {
     max-width: 100%;
-    max-height: 96vh;
-    border-radius: 8px;
+    max-height: 92vh;
+    border-radius: 10px;
   }
-  .modal__header,
-  .modal__footer { padding: 12px 14px; }
 }
 
-/* Tela muito baixa (laptop pequeno / janela curta) */
-@media (max-height: 700px) {
-  .modal__dialog { max-height: 94vh; }
-  .modal__header { padding: 10px 18px; }
-  .modal__footer { padding: 10px 18px; }
+/* Tela baixa (laptop curto) */
+@media (max-height: 720px) {
+  .modal__dialog { max-height: 88vh; }
 }
+@media (max-height: 600px) {
+  .modal__dialog { max-height: 94vh; }
+}
+
+/* =============================================================================
+   FAB — Botão flutuante "Novo Cliente" (mobile only)
+   ============================================================================= */
+.fab-novo-cliente {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: var(--color-accent, #2563eb);
+  color: #fff;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+  z-index: 800;
+  display: none;             /* oculto por padrão */
+  align-items: center;
+  justify-content: center;
+  transition: transform .15s, box-shadow .15s;
+}
+.fab-novo-cliente:hover {
+  transform: scale(1.05);
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.5);
+}
+.fab-novo-cliente:active {
+  transform: scale(0.95);
+}
+
+/* Só aparece em mobile/tablet pequeno */
+@media (max-width: 768px) {
+  .fab-novo-cliente { display: flex; }
+}
+
+/* Esconde quando o modal está aberto (não atrapalhar UI) */
+body:has(.modal:not([hidden])) .fab-novo-cliente { display: none; }
