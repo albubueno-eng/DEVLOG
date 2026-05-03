@@ -2911,15 +2911,35 @@ if (document.readyState === 'loading') {
 })();
 
 /* =========================================================
- * Monitor de Clientes – abrir e renderizar
+ * Monitor de Clientes – abrir e renderizar (v2 — seletor estrito)
  * ========================================================= */
 (function initCapacityMonitor(){
+  // ID dos elementos que DEVEM abrir o monitor (lista branca estrita)
+  const SELETOR_ABRIR = '#btnMonitorClientes, #menuMonitorClientes, [data-action="abrir-monitor-clientes"]';
+
   async function fetchCapacity() {
     const url = window.SCRIPT_URL + '?action=getCapacityMonitor&apiKey=' + encodeURIComponent(window.API_KEY);
-    const r = await fetch(url);
-    const j = await r.json();
-    if (!j.ok) throw new Error(j.error || 'Falha ao carregar monitor');
-    return j.data;
+    // Tenta GET primeiro; se falhar, tenta POST
+    try {
+      const r = await fetch(url);
+      const j = await r.json();
+      if (j && j.ok) return j.data;
+    } catch(e) { /* cai pro POST */ }
+
+    // Fallback POST (mesma rota que outras actions usam)
+    const token = localStorage.getItem('gm_token') || window.GM_TOKEN || '';
+    const r2 = await fetch(window.SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        apiKey: window.API_KEY,
+        token: token,
+        action: 'getcapacitymonitor'
+      })
+    });
+    const j2 = await r2.json();
+    if (!j2.ok) throw new Error(j2.error || 'Falha ao carregar monitor');
+    return j2.data;
   }
 
   function statusBadge(s) {
@@ -2929,7 +2949,9 @@ if (document.readyState === 'loading') {
   }
 
   function renderRow(c) {
-    const apps = Object.entries(c.apps||{}).map(([k,v])=>`<span class="chip">${k}: ${v}</span>`).join(' ') || '<span class="muted">—</span>';
+    const apps = Object.entries(c.apps||{})
+      .map(([k,v])=>`<span class="chip">${k}: ${v}</span>`)
+      .join(' ') || '<span class="muted">—</span>';
     const barColor = c.status==='cheio' ? '#dc2626' : c.status==='atencao' ? '#f59e0b' : '#10b981';
     return `
       <tr>
@@ -2954,14 +2976,15 @@ if (document.readyState === 'loading') {
       modal = document.createElement('div');
       modal.id = 'capacityMonitorModal';
       modal.className = 'modal';
+      modal.hidden = true;
       modal.innerHTML = `
         <div class="modal__backdrop" data-close></div>
         <div class="modal__dialog" style="max-width:920px;">
           <div class="modal__header">
-            <h3>📊 Monitor de Clientes</h3>
-            <button type="button" class="btn btn--ghost" data-close>✕</button>
+            <h3 style="margin:0;">📊 Monitor de Clientes</h3>
+            <button type="button" class="btn btn--ghost" data-close aria-label="Fechar">✕</button>
           </div>
-          <div class="modal__body" id="capMonBody">
+          <div class="modal__body" id="capMonBody" style="padding:16px;">
             <p class="muted">Carregando…</p>
           </div>
           <div class="modal__footer">
@@ -2970,8 +2993,12 @@ if (document.readyState === 'loading') {
           </div>
         </div>`;
       document.body.appendChild(modal);
+
+      // Fechar APENAS dentro deste modal (não vaza para outros modais)
       modal.addEventListener('click', e => {
-        if (e.target.matches('[data-close]')) modal.hidden = true;
+        if (e.target.matches('[data-close]') || e.target.closest('[data-close]')) {
+          modal.hidden = true;
+        }
       });
       modal.querySelector('#capMonRefresh').addEventListener('click', loadAndRender);
     }
@@ -2981,40 +3008,51 @@ if (document.readyState === 'loading') {
 
   async function loadAndRender() {
     const body = document.getElementById('capMonBody');
+    if (!body) return;
     body.innerHTML = '<p class="muted">Carregando…</p>';
     try {
       const data = await fetchCapacity();
-      if (!data.clientes.length) {
+      if (!data || !data.clientes || !data.clientes.length) {
         body.innerHTML = '<p class="muted">Nenhum cliente cadastrado.</p>';
         return;
       }
       body.innerHTML = `
-        <div class="capmon-summary" style="display:flex;gap:16px;margin-bottom:12px;">
+        <div class="capmon-summary" style="display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap;">
           <div><strong>${data.totais.clientes}</strong> clientes</div>
           <div><strong>${data.totais.funcionarios}</strong> funcionários ativos</div>
           <div>Capacidade: <strong>${data.totais.capacidadeTotal}</strong></div>
         </div>
-        <table class="table" style="width:100%;font-size:13px;">
-          <thead>
-            <tr><th>Cliente</th><th>Plano</th><th>Uso</th><th>Apps</th><th>Status</th></tr>
-          </thead>
-          <tbody>${data.clientes.map(renderRow).join('')}</tbody>
-        </table>`;
+        <div style="overflow-x:auto;">
+          <table class="table" style="width:100%;font-size:13px;border-collapse:collapse;">
+            <thead>
+              <tr style="background:#f3f4f6;">
+                <th style="text-align:left;padding:8px;">Cliente</th>
+                <th style="text-align:left;padding:8px;">Plano</th>
+                <th style="text-align:left;padding:8px;">Uso</th>
+                <th style="text-align:left;padding:8px;">Apps</th>
+                <th style="text-align:left;padding:8px;">Status</th>
+              </tr>
+            </thead>
+            <tbody>${data.clientes.map(renderRow).join('')}</tbody>
+          </table>
+        </div>`;
     } catch (e) {
       console.error('[capmon]', e);
-      body.innerHTML = `<div class="form__banner" data-type="error">Erro: ${e.message}</div>`;
+      body.innerHTML = `<div class="form__banner" data-type="error" style="background:#fee2e2;color:#991b1b;padding:12px;border-radius:6px;">Erro: ${e.message}</div>`;
     }
   }
 
   window.openCapacityMonitor = openMonitor;
 
-  // Delegação para qualquer botão/menu existente
+  // Delegação ESTRITA — só dispara em elementos com IDs/atributos exatos.
+  // NÃO usa mais `data-section="capacity"` nem texto solto.
   document.addEventListener('click', e => {
-    const t = e.target.closest('[data-action="monitor-clientes"], #btnMonitorClientes, [data-section="capacity"]');
+    const t = e.target.closest(SELETOR_ABRIR);
     if (!t) return;
     e.preventDefault();
+    e.stopPropagation();
     openMonitor();
   });
-  console.log('[capmon] Monitor de Clientes pronto. Use window.openCapacityMonitor() ou clique no menu.');
-})();
 
+  console.log('[capmon] v2 carregado. Seletor estrito:', SELETOR_ABRIR);
+})();
