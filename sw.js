@@ -7,7 +7,7 @@
  *  - Versão bumped → cache antigo é deletado automaticamente
  */
 
-const CACHE_VERSION = 'v9.2';
+const CACHE_VERSION = 'v9.3';
 const CACHE_NAME = 'godmode-' + CACHE_VERSION;
 
 const STATIC_ASSETS = [
