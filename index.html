@@ -375,5 +375,32 @@
   <!-- App principal — ES Module -->
   <script type="module" src="./js/admin.js"></script>
 
+  <!-- FAB (Floating Action Button) — visível só no mobile -->
+<button
+  type="button"
+  class="fab-novo-cliente"
+  id="fabNovoCliente"
+  aria-label="Novo Cliente"
+  title="Novo Cliente"
+>+</button>
+
+<script>
+  (function () {
+    var fab = document.getElementById('fabNovoCliente');
+    if (!fab) return;
+    fab.addEventListener('click', function () {
+      // Tenta acionar o botão "Novo Cliente" existente da sidebar
+      var alvo = document.querySelector('[data-action="novo-cliente"]')
+              || document.querySelector('#btnNovoCliente')
+              || Array.from(document.querySelectorAll('button')).find(function (b) {
+                   return /novo\s*cliente/i.test(b.textContent || '');
+                 });
+      if (alvo) alvo.click();
+      else console.warn('[FAB] Botão "Novo Cliente" não encontrado');
+    });
+  })();
+</script>
+
+
 </body>
 </html>
