@@ -2911,74 +2911,104 @@ if (document.readyState === 'loading') {
 })();
 
 /* =========================================================
- * Monitor de Clientes – abrir e renderizar (v2 — seletor estrito)
+ * Monitor de Clientes – v3 (URL/API_KEY auto-detectados + #capacityBtn)
  * ========================================================= */
 (function initCapacityMonitor(){
-  // ID dos elementos que DEVEM abrir o monitor (lista branca estrita)
- const SELETOR_ABRIR = [
-  '#btnMonitorClientes',
-  '#menuMonitorClientes',
-  '#btnCapacityMonitor',
-  '#capacityMonitorBtn',
-  '#topbarCapacityBtn',
-  '[data-action="abrir-monitor-clientes"]',
-  '[data-action="capacity-monitor"]',
-  '[data-action="monitor"]',
-  '[title="Monitor de Clientes"]',
-  '[aria-label="Monitor de Clientes"]'
-].join(', ');
+  // Lista branca de gatilhos — inclui o botão da topbar (#capacityBtn)
+  const SELETOR_ABRIR = [
+    '#capacityBtn',
+    '#btnMonitorClientes',
+    '#menuMonitorClientes',
+    '#btnCapacityMonitor',
+    '[data-action="abrir-monitor-clientes"]',
+    '[data-action="capacity-monitor"]',
+    '[title="Capacity Monitor"]',
+    '[aria-label="Abrir Capacity Monitor"]'
+  ].join(', ');
 
+  // Auto-detecta SCRIPT_URL e API_KEY de várias fontes possíveis
+  function getCfg() {
+    const cfg = (window.CONFIG || window.AppConfig || window.ADMIN_CONFIG || {});
+    const scriptUrl =
+      window.SCRIPT_URL ||
+      window.GAS_URL ||
+      cfg.SCRIPT_URL ||
+      cfg.scriptUrl ||
+      cfg.GAS_URL ||
+      cfg.API_URL ||
+      cfg.apiUrl ||
+      (typeof SCRIPT_URL !== 'undefined' ? SCRIPT_URL : '') ||
+      '';
+    const apiKey =
+      window.API_KEY ||
+      cfg.API_KEY ||
+      cfg.apiKey ||
+      (typeof API_KEY !== 'undefined' ? API_KEY : '') ||
+      '';
+    const token =
+      localStorage.getItem('gm_token') ||
+      localStorage.getItem('godmode_token') ||
+      window.GM_TOKEN ||
+      cfg.token ||
+      '';
+    return { scriptUrl, apiKey, token };
+  }
 
   async function fetchCapacity() {
-    const url = window.SCRIPT_URL + '?action=getCapacityMonitor&apiKey=' + encodeURIComponent(window.API_KEY);
-    // Tenta GET primeiro; se falhar, tenta POST
-    try {
-      const r = await fetch(url);
-      const j = await r.json();
-      if (j && j.ok) return j.data;
-    } catch(e) { /* cai pro POST */ }
+    const { scriptUrl, apiKey, token } = getCfg();
+    if (!scriptUrl) {
+      throw new Error('SCRIPT_URL não encontrado. Verifique a configuração do admin.js.');
+    }
+    if (!apiKey) {
+      throw new Error('API_KEY não encontrado. Verifique a configuração do admin.js.');
+    }
 
-    // Fallback POST (mesma rota que outras actions usam)
-    const token = localStorage.getItem('gm_token') || window.GM_TOKEN || '';
-    const r2 = await fetch(window.SCRIPT_URL, {
+    // POST padrão (mesmo método das outras actions do admin)
+    const r = await fetch(scriptUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({
-        apiKey: window.API_KEY,
+        apiKey: apiKey,
         token: token,
         action: 'getcapacitymonitor'
       })
     });
-    const j2 = await r2.json();
-    if (!j2.ok) throw new Error(j2.error || 'Falha ao carregar monitor');
-    return j2.data;
+
+    let j;
+    try { j = await r.json(); }
+    catch(e) {
+      const txt = await r.text().catch(()=>''); 
+      throw new Error('Resposta inválida do servidor (HTTP ' + r.status + '): ' + txt.slice(0,150));
+    }
+    if (!j.ok) throw new Error(j.error || 'Falha ao carregar monitor');
+    return j.data;
   }
 
   function statusBadge(s) {
-    if (s === 'cheio')   return '<span class="badge badge--danger">Cheio</span>';
-    if (s === 'atencao') return '<span class="badge badge--warning">Atenção</span>';
-    return '<span class="badge badge--success">OK</span>';
+    if (s === 'cheio')   return '<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:10px;font-size:11px;">Cheio</span>';
+    if (s === 'atencao') return '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:10px;font-size:11px;">Atenção</span>';
+    return '<span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:10px;font-size:11px;">OK</span>';
   }
 
   function renderRow(c) {
     const apps = Object.entries(c.apps||{})
-      .map(([k,v])=>`<span class="chip">${k}: ${v}</span>`)
-      .join(' ') || '<span class="muted">—</span>';
+      .map(([k,v])=>`<span style="background:#eef2ff;color:#3730a3;padding:2px 6px;border-radius:4px;font-size:11px;margin-right:4px;">${k}: ${v}</span>`)
+      .join('') || '<span style="color:#9ca3af;">—</span>';
     const barColor = c.status==='cheio' ? '#dc2626' : c.status==='atencao' ? '#f59e0b' : '#10b981';
     return `
-      <tr>
-        <td><strong>${c.nome}</strong><br><small class="muted">${c.idCliente}</small></td>
-        <td>${c.plano}</td>
-        <td>
-          <div style="display:flex;align-items:center;gap:8px;">
+      <tr style="border-bottom:1px solid #e5e7eb;">
+        <td style="padding:8px;"><strong>${c.nome}</strong><br><small style="color:#6b7280;">${c.idCliente}</small></td>
+        <td style="padding:8px;">${c.plano}</td>
+        <td style="padding:8px;">
+          <div style="display:flex;align-items:center;gap:8px;min-width:160px;">
             <div style="flex:1;height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden;">
               <div style="width:${Math.min(100,c.percentual)}%;height:100%;background:${barColor};"></div>
             </div>
             <span style="font-size:12px;white-space:nowrap;">${c.usados}/${c.quota} (${c.percentual}%)</span>
           </div>
         </td>
-        <td>${apps}</td>
-        <td>${statusBadge(c.status)}</td>
+        <td style="padding:8px;">${apps}</td>
+        <td style="padding:8px;">${statusBadge(c.status)}</td>
       </tr>`;
   }
 
@@ -2987,26 +3017,26 @@ if (document.readyState === 'loading') {
     if (!modal) {
       modal = document.createElement('div');
       modal.id = 'capacityMonitorModal';
-      modal.className = 'modal';
+      modal.style.cssText = 'position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;';
       modal.hidden = true;
       modal.innerHTML = `
-        <div class="modal__backdrop" data-close></div>
-        <div class="modal__dialog" style="max-width:920px;">
-          <div class="modal__header">
-            <h3 style="margin:0;">📊 Monitor de Clientes</h3>
-            <button type="button" class="btn btn--ghost" data-close aria-label="Fechar">✕</button>
+        <div data-close style="position:absolute;inset:0;background:rgba(0,0,0,0.5);"></div>
+        <div style="position:relative;background:#fff;border-radius:12px;max-width:920px;width:100%;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+          <div style="padding:16px 20px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;">
+            <h3 style="margin:0;font-size:18px;">📊 Monitor de Clientes</h3>
+            <button type="button" data-close style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;" aria-label="Fechar">✕</button>
           </div>
-          <div class="modal__body" id="capMonBody" style="padding:16px;">
-            <p class="muted">Carregando…</p>
+          <div id="capMonBody" style="padding:16px 20px;overflow-y:auto;flex:1;">
+            <p style="color:#6b7280;">Carregando…</p>
           </div>
-          <div class="modal__footer">
-            <button type="button" class="btn btn--ghost" data-close>Fechar</button>
-            <button type="button" class="btn btn--primary" id="capMonRefresh">🔄 Atualizar</button>
+          <div style="padding:12px 20px;border-top:1px solid #e5e7eb;background:#f9fafb;display:flex;justify-content:flex-end;gap:8px;">
+            <button type="button" data-close style="padding:6px 14px;background:#fff;border:1px solid #d1d5db;border-radius:6px;cursor:pointer;">Fechar</button>
+            <button type="button" id="capMonRefresh" style="padding:6px 14px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;">🔄 Atualizar</button>
           </div>
         </div>`;
       document.body.appendChild(modal);
 
-      // Fechar APENAS dentro deste modal (não vaza para outros modais)
+      // Fechar (escopado dentro do modal)
       modal.addEventListener('click', e => {
         if (e.target.matches('[data-close]') || e.target.closest('[data-close]')) {
           modal.hidden = true;
@@ -3021,21 +3051,21 @@ if (document.readyState === 'loading') {
   async function loadAndRender() {
     const body = document.getElementById('capMonBody');
     if (!body) return;
-    body.innerHTML = '<p class="muted">Carregando…</p>';
+    body.innerHTML = '<p style="color:#6b7280;">Carregando…</p>';
     try {
       const data = await fetchCapacity();
       if (!data || !data.clientes || !data.clientes.length) {
-        body.innerHTML = '<p class="muted">Nenhum cliente cadastrado.</p>';
+        body.innerHTML = '<p style="color:#6b7280;">Nenhum cliente cadastrado.</p>';
         return;
       }
       body.innerHTML = `
-        <div class="capmon-summary" style="display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap;">
+        <div style="display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap;font-size:13px;">
           <div><strong>${data.totais.clientes}</strong> clientes</div>
           <div><strong>${data.totais.funcionarios}</strong> funcionários ativos</div>
-          <div>Capacidade: <strong>${data.totais.capacidadeTotal}</strong></div>
+          <div>Capacidade total: <strong>${data.totais.capacidadeTotal}</strong></div>
         </div>
         <div style="overflow-x:auto;">
-          <table class="table" style="width:100%;font-size:13px;border-collapse:collapse;">
+          <table style="width:100%;font-size:13px;border-collapse:collapse;">
             <thead>
               <tr style="background:#f3f4f6;">
                 <th style="text-align:left;padding:8px;">Cliente</th>
@@ -3050,21 +3080,21 @@ if (document.readyState === 'loading') {
         </div>`;
     } catch (e) {
       console.error('[capmon]', e);
-      body.innerHTML = `<div class="form__banner" data-type="error" style="background:#fee2e2;color:#991b1b;padding:12px;border-radius:6px;">Erro: ${e.message}</div>`;
+      body.innerHTML = `<div style="background:#fee2e2;color:#991b1b;padding:12px;border-radius:6px;">❌ ${e.message}</div>`;
     }
   }
 
   window.openCapacityMonitor = openMonitor;
 
-  // Delegação ESTRITA — só dispara em elementos com IDs/atributos exatos.
-  // NÃO usa mais `data-section="capacity"` nem texto solto.
+  // Delegação ESTRITA + previne o sistema antigo de capacity drawer
   document.addEventListener('click', e => {
     const t = e.target.closest(SELETOR_ABRIR);
     if (!t) return;
     e.preventDefault();
     e.stopPropagation();
+    e.stopImmediatePropagation();   // bloqueia handler antigo do #capacityBtn
     openMonitor();
-  });
+  }, true);   // capture=true → roda ANTES do listener antigo
 
-  console.log('[capmon] v2 carregado. Seletor estrito:', SELETOR_ABRIR);
+  console.log('[capmon] v3 carregado. Gatilhos:', SELETOR_ABRIR);
 })();
