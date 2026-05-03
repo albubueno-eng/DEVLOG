@@ -2380,38 +2380,374 @@ if (document.readyState === 'loading') {
   init();
 }
 
-function _sanitizarLogoUrl(url) {
-  if (!url) return '';
-  const u = String(url).trim();
-  if (!u) return '';
-  const lower = u.toLowerCase();
+/* =============================================================================
+   FORMULÁRIO INTELIGENTE — Novo Cliente
+   Validação inline, máscaras, upload de logo, submit funcional
+   ============================================================================= */
 
-  // bloqueia esquemas perigosos
-  if (lower.indexOf('javascript:') === 0) return '';
-  if (lower.indexOf('vbscript:')   === 0) return '';
-  if (lower.indexOf('file:')       === 0) return '';
-
-  // aceita https:// OU data:image/(png|jpeg|jpg|svg+xml|webp);base64,
-  const isHttps = lower.indexOf('https://') === 0;
-  const isDataImg = /^data:image\/(png|jpe?g|svg\+xml|webp);base64,/i.test(u);
-  if (!isHttps && !isDataImg) return '';
-
-  // tamanho max para data URI (~700KB base64 = ~500KB binário)
-  if (isDataImg && u.length > 720000) return '';
-
-  // se for https, valida extensão
-  if (isHttps) {
-    const semQuery = lower.split('?')[0].split('#')[0];
-    const exts = (CONFIG.LOGO_EXTENSOES_VALIDAS || ['png','jpg','jpeg','svg','webp']);
-    let ok = false;
-    for (let i = 0; i < exts.length; i++) {
-      if (semQuery.endsWith('.' + exts[i])) { ok = true; break; }
-    }
-    if (!ok) return '';
+(function initFormNovoCliente() {
+  const form = document.getElementById('formNovoCliente');
+  if (!form) {
+    console.warn('[novoCliente] form não encontrado');
+    return;
   }
 
-  // bloqueia chars perigosos no rendering (só para https; data já é validado pelo regex)
-  if (isHttps && /["'<>`]/.test(u)) return '';
+  // ---------- helpers ----------
+  const $ = (sel) => form.querySelector(sel);
+  const fields = {
+    idCliente:    $('#ncIdCliente'),
+    razaoSocial:  $('#ncRazaoSocial'),
+    nomeFantasia: $('#ncNomeFantasia'),
+    cnpj:         $('#ncCnpj'),
+    email:        $('#ncEmail'),
+    telefone:     $('#ncTelefone'),
+    plano:        $('#ncPlano'),
+    quota:        $('#ncQuota'),
+    logoUrl:      $('#ncLogoUrl'),
+    corPrim:      $('#ncCorPrimaria'),
+    corPicker:    $('#ncCorPicker'),
+  };
+  const submitBtn  = $('#ncSubmitBtn');
+  const btnLabel   = submitBtn?.querySelector('.btn__label');
+  const btnSpinner = submitBtn?.querySelector('.btn__spinner');
 
-  return u;
-}
+  function setError(fieldName, msg) {
+    const wrap = form.querySelector(`[data-field="${fieldName}"]`);
+    if (!wrap) return;
+    wrap.classList.add('is-invalid');
+    wrap.classList.remove('is-valid');
+    const errEl = wrap.querySelector('.form__error');
+    if (errEl) {
+      errEl.textContent = msg;
+      errEl.hidden = false;
+    }
+  }
+  function setValid(fieldName) {
+    const wrap = form.querySelector(`[data-field="${fieldName}"]`);
+    if (!wrap) return;
+    wrap.classList.remove('is-invalid');
+    wrap.classList.add('is-valid');
+    const errEl = wrap.querySelector('.form__error');
+    if (errEl) { errEl.textContent = ''; errEl.hidden = true; }
+  }
+  function clearState(fieldName) {
+    const wrap = form.querySelector(`[data-field="${fieldName}"]`);
+    if (!wrap) return;
+    wrap.classList.remove('is-invalid', 'is-valid');
+    const errEl = wrap.querySelector('.form__error');
+    if (errEl) { errEl.textContent = ''; errEl.hidden = true; }
+  }
+  function clearAllErrors() {
+    form.querySelectorAll('.form__field').forEach(f => {
+      f.classList.remove('is-invalid', 'is-valid');
+      const e = f.querySelector('.form__error');
+      if (e) { e.textContent = ''; e.hidden = true; }
+    });
+    const banner = form.querySelector('.form__banner');
+    if (banner) banner.remove();
+  }
+  function showBanner(msg, type = 'error') {
+    let banner = form.querySelector('.form__banner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.className = 'form__banner';
+      form.insertBefore(banner, form.firstChild);
+    }
+    banner.dataset.type = type;
+    banner.textContent = msg;
+    banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  // ---------- máscaras ----------
+  function maskCnpj(v) {
+    const d = String(v).replace(/\D/g, '').slice(0, 14);
+    let out = d;
+    if (d.length > 2)  out = d.slice(0, 2) + '.' + d.slice(2);
+    if (d.length > 5)  out = d.slice(0, 2) + '.' + d.slice(2, 5) + '.' + d.slice(5);
+    if (d.length > 8)  out = d.slice(0, 2) + '.' + d.slice(2, 5) + '.' + d.slice(5, 8) + '/' + d.slice(8);
+    if (d.length > 12) out = d.slice(0, 2) + '.' + d.slice(2, 5) + '.' + d.slice(5, 8) + '/' + d.slice(8, 12) + '-' + d.slice(12);
+    return out;
+  }
+  function maskTelefone(v) {
+    const d = String(v).replace(/\D/g, '').slice(0, 11);
+    if (d.length <= 10) {
+      // (11) 9999-9999
+      return d
+        .replace(/^(\d{0,2})/,           '($1')
+        .replace(/^\((\d{2})(\d)/,       '($1) $2')
+        .replace(/(\d{4})(\d)/,          '$1-$2');
+    }
+    // (11) 99999-9999
+    return d
+      .replace(/^(\d{2})(\d)/,           '($1) $2')
+      .replace(/(\d{5})(\d)/,            '$1-$2');
+  }
+  function validarCnpj(cnpj) {
+    const d = String(cnpj).replace(/\D/g, '');
+    if (d.length !== 14) return false;
+    if (/^(\d)\1{13}$/.test(d)) return false; // todos iguais
+    let t = d.length - 2;
+    let n = d.substring(0, t);
+    const v = d.substring(t);
+    let s = 0, p = t - 7;
+    for (let i = t; i >= 1; i--) {
+      s += +n.charAt(t - i) * p--;
+      if (p < 2) p = 9;
+    }
+    let r = s % 11 < 2 ? 0 : 11 - s % 11;
+    if (r != +v.charAt(0)) return false;
+    t = t + 1; n = d.substring(0, t); s = 0; p = t - 7;
+    for (let i = t; i >= 1; i--) {
+      s += +n.charAt(t - i) * p--;
+      if (p < 2) p = 9;
+    }
+    r = s % 11 < 2 ? 0 : 11 - s % 11;
+    return r == +v.charAt(1);
+  }
+  function validarEmail(e) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(e).trim());
+  }
+
+  // ---------- aplicar máscaras em tempo real ----------
+  fields.cnpj?.addEventListener('input', (e) => {
+    const cur = e.target.selectionStart;
+    e.target.value = maskCnpj(e.target.value);
+    // mantém cursor no fim quando digitando
+    e.target.setSelectionRange(e.target.value.length, e.target.value.length);
+  });
+  fields.telefone?.addEventListener('input', (e) => {
+    e.target.value = maskTelefone(e.target.value);
+    e.target.setSelectionRange(e.target.value.length, e.target.value.length);
+  });
+  fields.idCliente?.addEventListener('input', (e) => {
+    // só lowercase + a-z, 0-9, _, -
+    e.target.value = e.target.value
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '');
+  });
+
+  // ---------- color picker sincronizado ----------
+  fields.corPicker?.addEventListener('input', (e) => {
+    fields.corPrim.value = e.target.value;
+    clearState('corPrimaria');
+  });
+  fields.corPrim?.addEventListener('input', (e) => {
+    const v = e.target.value.trim();
+    if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+      fields.corPicker.value = v.toLowerCase();
+    }
+  });
+
+  // ---------- validação por campo (blur / input) ----------
+  function validateField(name) {
+    const v = (fields[name === 'corPrim' ? 'corPrim' : name]?.value || '').trim();
+    switch (name) {
+      case 'idCliente':
+        if (!v) return setError('idCliente', 'Obrigatório.');
+        if (!/^[a-z0-9_-]{2,32}$/.test(v))
+          return setError('idCliente', 'Use 2-32 caracteres: a-z, 0-9, _ ou -.');
+        return setValid('idCliente');
+
+      case 'razaoSocial':
+        if (!v) return setError('razaoSocial', 'Obrigatório.');
+        if (v.length < 3) return setError('razaoSocial', 'Mínimo 3 caracteres.');
+        return setValid('razaoSocial');
+
+      case 'cnpj':
+        if (!v) return setError('cnpj', 'Obrigatório.');
+        const d = v.replace(/\D/g, '');
+        if (d.length !== 14) return setError('cnpj', 'CNPJ deve ter 14 dígitos.');
+        if (!validarCnpj(v)) return setError('cnpj', 'CNPJ inválido (dígito verificador).');
+        return setValid('cnpj');
+
+      case 'email':
+        if (!v) { clearState('email'); return; } // opcional
+        if (!validarEmail(v)) return setError('email', 'Email inválido.');
+        return setValid('email');
+
+      case 'quota':
+        const n = Number(v);
+        if (!v) return setError('quotaFuncionarios', 'Obrigatório.');
+        if (!Number.isFinite(n) || n < 1 || n > 500)
+          return setError('quotaFuncionarios', 'Entre 1 e 500.');
+        return setValid('quotaFuncionarios');
+
+      case 'corPrim':
+        if (!v) { clearState('corPrimaria'); return; }
+        if (!/^#[0-9a-fA-F]{6}$/.test(v))
+          return setError('corPrimaria', 'Use formato #RRGGBB.');
+        return setValid('corPrimaria');
+    }
+  }
+
+  fields.idCliente?.addEventListener('blur',  () => validateField('idCliente'));
+  fields.razaoSocial?.addEventListener('blur', () => validateField('razaoSocial'));
+  fields.cnpj?.addEventListener('blur',       () => validateField('cnpj'));
+  fields.email?.addEventListener('blur',      () => validateField('email'));
+  fields.quota?.addEventListener('input',     () => validateField('quota'));
+  fields.corPrim?.addEventListener('blur',    () => validateField('corPrim'));
+  // limpa estado ao começar a digitar de novo
+  Object.values(fields).forEach(el => {
+    el?.addEventListener('input', () => {
+      const wrap = el.closest('.form__field');
+      if (wrap?.classList.contains('is-invalid')) {
+        wrap.classList.remove('is-invalid');
+        const e = wrap.querySelector('.form__error');
+        if (e) { e.textContent = ''; e.hidden = true; }
+      }
+    });
+  });
+
+  // ---------- upload de logo ----------
+  const logoFile      = $('#ncLogoFile');
+  const logoUploadBtn = $('#ncLogoUploadBtn');
+  const logoRemoveBtn = $('#ncLogoRemoveBtn');
+  const logoPreview   = $('#ncLogoPreview');
+  const MAX_LOGO_KB   = 500;
+
+  logoUploadBtn?.addEventListener('click', () => logoFile.click());
+
+  logoFile?.addEventListener('change', (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > MAX_LOGO_KB * 1024) {
+      setError('logo', `Arquivo muito grande (${Math.round(file.size/1024)} KB). Máximo ${MAX_LOGO_KB} KB.`);
+      logoFile.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target.result;
+      // preview
+      logoPreview.innerHTML = `<img src="${dataUrl}" alt="logo" />`;
+      logoRemoveBtn.hidden = false;
+      // grava no campo URL como data URI
+      fields.logoUrl.value = dataUrl;
+      setValid('logo');
+    };
+    reader.onerror = () => setError('logo', 'Falha ao ler o arquivo.');
+    reader.readAsDataURL(file);
+  });
+
+  logoRemoveBtn?.addEventListener('click', () => {
+    fields.logoUrl.value = '';
+    logoFile.value = '';
+    logoPreview.innerHTML = '<span class="logo-uploader__placeholder">Sem logo</span>';
+    logoRemoveBtn.hidden = true;
+    clearState('logo');
+  });
+
+  // se digitar URL manual, mostra preview
+  fields.logoUrl?.addEventListener('input', (e) => {
+    const v = e.target.value.trim();
+    if (!v) {
+      logoPreview.innerHTML = '<span class="logo-uploader__placeholder">Sem logo</span>';
+      logoRemoveBtn.hidden = true;
+      return;
+    }
+    if (/^https:\/\//.test(v) || /^data:image\//.test(v)) {
+      logoPreview.innerHTML = `<img src="${v}" alt="logo" onerror="this.parentNode.innerHTML='<span class=\\'logo-uploader__placeholder\\'>URL inválida</span>'" />`;
+      logoRemoveBtn.hidden = false;
+    }
+  });
+
+  // ---------- submit ----------
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    clearAllErrors();
+
+    // valida todos
+    ['idCliente', 'razaoSocial', 'cnpj', 'email', 'quota', 'corPrim'].forEach(validateField);
+
+    const hasError = form.querySelectorAll('.form__field.is-invalid').length > 0;
+    if (hasError) {
+      showBanner('Corrija os campos destacados antes de continuar.', 'error');
+      const first = form.querySelector('.form__field.is-invalid input, .form__field.is-invalid select');
+      first?.focus();
+      return;
+    }
+
+    // monta payload
+    const payload = {
+      idCliente:         fields.idCliente.value.trim(),
+      nome:              fields.razaoSocial.value.trim(),
+      nomeFantasia:      fields.nomeFantasia.value.trim() || fields.razaoSocial.value.trim(),
+      cnpj:              fields.cnpj.value.replace(/\D/g, ''),
+      email:             fields.email.value.trim(),
+      telefone:          fields.telefone.value.trim(),
+      plano:             fields.plano.value,
+      quotaFuncionarios: Number(fields.quota.value),
+      logoUrl:           fields.logoUrl.value.trim(),
+      corPrimaria:       fields.corPrim.value.trim() || '#2563eb',
+    };
+
+    // estado de loading
+    submitBtn.disabled = true;
+    if (btnLabel)   btnLabel.textContent = 'Cadastrando…';
+    if (btnSpinner) btnSpinner.hidden = false;
+
+    try {
+      // Tenta usar a API global do admin.js
+      let resp;
+      if (typeof adminApiPost === 'function') {
+        resp = await adminApiPost('createClient', payload);
+      } else if (window.__adminApi?.post) {
+        resp = await window.__adminApi.post('createClient', payload);
+      } else {
+        // fallback direto
+        const res = await fetch(window.CONFIG?.SCRIPT_URL || window.SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            apiKey: window.CONFIG?.API_KEY || window.API_KEY,
+            token:  localStorage.getItem('gm_token'),
+            action: 'createClient',
+            ...payload,
+          }),
+        });
+        const json = await res.json();
+        if (!json.ok) throw new Error(json.error || 'Falha desconhecida');
+        resp = json.data || json;
+      }
+
+      showBanner('✓ Cliente cadastrado com sucesso!', 'success');
+      // espera 800ms e fecha modal + recarrega
+      setTimeout(() => {
+        const modal = form.closest('.modal');
+        if (modal) {
+          modal.hidden = true;
+          modal.setAttribute('aria-hidden', 'true');
+        }
+        form.reset();
+        clearAllErrors();
+        if (logoPreview) logoPreview.innerHTML = '<span class="logo-uploader__placeholder">Sem logo</span>';
+        if (logoRemoveBtn) logoRemoveBtn.hidden = true;
+        // recarrega dashboard
+        if (typeof loadData === 'function') loadData();
+      }, 800);
+
+    } catch (err) {
+      console.error('[createClient]', err);
+      const msg = err?.message || String(err);
+
+      // mensagens contextuais
+      if (/já existe|exists/i.test(msg)) {
+        setError('idCliente', 'Este idCliente já está em uso.');
+        showBanner('idCliente duplicado. Escolha outro.', 'error');
+      } else if (/cnpj/i.test(msg)) {
+        setError('cnpj', msg);
+      } else if (/permissão|permission|admin/i.test(msg)) {
+        showBanner('Sem permissão. Apenas administradores podem cadastrar clientes.', 'error');
+      } else {
+        showBanner('Falha ao cadastrar: ' + msg, 'error');
+      }
+    } finally {
+      submitBtn.disabled = false;
+      if (btnLabel)   btnLabel.textContent = 'Cadastrar cliente';
+      if (btnSpinner) btnSpinner.hidden = true;
+    }
+  });
+
+  console.log('[novoCliente] formulário inteligente inicializado');
+})();
+
