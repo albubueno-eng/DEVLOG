@@ -59,6 +59,7 @@
     // ─── UI sub-state ───────────────────────────────────────────────────────
     ui: {
       search: '',
+      timeRange: 'all', // <-- [GM-08] Adicione esta linha
       severity: {
         ERRO:    true,
         ALERTA:  true,
@@ -179,6 +180,7 @@
     pillCountInfo:    document.getElementById('pillCountInfo'),
     exportCsvBtn:     document.getElementById('exportCsvBtn'),
     themeToggleBtn:   document.getElementById('themeToggleBtn'),
+    timeFilterSelect: document.getElementById('timeFilterSelect'), // <-- [GM-08] Adicione esta linha
 
     capacityBtn:      document.getElementById('capacityBtn'),
     capacityBadge:    document.getElementById('capacityBadge'),
@@ -503,6 +505,64 @@
     );
   }
 
+  // [GM-08] Filtro de tempo
+  function applyTimeFilter(items) {
+    if (state.ui.timeRange === 'all') return items;
+    
+    const agora = Date.now();
+    let limiteMs = 0;
+    
+    if (state.ui.timeRange === '24h') limiteMs = 24 * 60 * 60 * 1000;
+    else if (state.ui.timeRange === '7d') limiteMs = 7 * 24 * 60 * 60 * 1000;
+    else if (state.ui.timeRange === '30d') limiteMs = 30 * 24 * 60 * 60 * 1000;
+
+    const dataCorte = agora - limiteMs;
+
+    return items.filter(item => {
+      const dataStr = item.timestamp || item.inicioSessao;
+      if (!dataStr) return true;
+      const ts = new Date(dataStr).getTime();
+      if (isNaN(ts)) return true;
+      return ts >= dataCorte;
+    });
+  }
+
+  // Dispatcher atualizado com o pipeline de tempo
+  function getEventsForActiveTab() {
+    if (state.activeTab === 'auth') {
+      const auth = getAuthFiltradosCliente();
+      const tempoFiltrado = applyTimeFilter(auth);
+      return applySearchFilter(tempoFiltrado, 'auth');
+    }
+    if (state.activeTab === 'sessions') {
+      const ses = getSessoesFiltradasCliente();
+      const tempoFiltrado = applyTimeFilter(ses);
+      return applySearchFilter(tempoFiltrado, 'sessions');
+    }
+    // logs: pipeline completo
+    const c = getLogsFiltradosCliente();
+    const s = applySeverityFilter(c);
+    const tempoFiltrado = applyTimeFilter(s);
+    return applySearchFilter(tempoFiltrado, 'logs');
+  }
+    if (kind === 'auth') {
+      return items.filter(a =>
+        contains(a.aplicativo, q) ||
+        contains(a.usuario, q) ||
+        contains(a.dispositivo, q) ||
+        contains(a.tipoEvento, q) ||
+        contains(a.detalhes, q) ||
+        contains(getNomeCliente(a.idCliente), q)
+      );
+    }
+    return items.filter(s =>
+      contains(s.aplicativo, q) ||
+      contains(s.usuario, q) ||
+      contains(s.dispositivo, q) ||
+      contains(getNomeCliente(s.idCliente), q)
+    );
+  }
+
   function contains(field, q) {
     if (field === null || field === undefined) return false;
     return String(field).toLowerCase().includes(q);
@@ -510,14 +570,19 @@
 
   function getEventsForActiveTab() {
     if (state.activeTab === 'auth') {
-      return applySearchFilter(getAuthFiltradosCliente(), 'auth');
+      const auth = getAuthFiltradosCliente();
+      const tempoFiltrado = applyTimeFilter(auth);
+      return applySearchFilter(tempoFiltrado, 'auth');
     }
     if (state.activeTab === 'sessions') {
-      return applySearchFilter(getSessoesFiltradasCliente(), 'sessions');
+      const ses = getSessoesFiltradasCliente();
+      const tempoFiltrado = applyTimeFilter(ses);
+      return applySearchFilter(tempoFiltrado, 'sessions');
     }
     const c = getLogsFiltradosCliente();
     const s = applySeverityFilter(c);
-    return applySearchFilter(s, 'logs');
+    const tempoFiltrado = applyTimeFilter(s);
+    return applySearchFilter(tempoFiltrado, 'logs');
   }
 
   const CAP_STATUS_ORDER = ['CRITICO', 'ALERTA', 'ATENCAO', 'OFFLINE', 'PENDING', 'SAUDAVEL', 'MIGRADO'];
@@ -1683,7 +1748,7 @@
     return map[status] || status;
   }
 
-  // ==========================================================================
+ // ==========================================================================
   // 17. EVENTS
   // ==========================================================================
   function bindEvents() {
@@ -1740,6 +1805,15 @@
         const pill = ev.target.closest('.pill[data-severity]');
         if (!pill) return;
         toggleSeverity(pill.dataset.severity);
+      });
+    }
+
+    // [GM-08] Escutador do Filtro Temporal ────────────────────────────────
+    if (dom.timeFilterSelect) {
+      dom.timeFilterSelect.addEventListener('change', (ev) => {
+        state.ui.timeRange = ev.target.value;
+        renderEventsList();
+        renderHeader();
       });
     }
 
@@ -1834,7 +1908,6 @@
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
   }
-
   // ==========================================================================
   // 18. CLIENT MODAL
   // ==========================================================================
