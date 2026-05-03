@@ -1,4 +1,4 @@
-/**
+    /**
  * ============================================================================
  *  ADMIN.JS — Painel God Mode (Admin) v2.2
  *  Restauração fiel do dev.js v2.1 + arquitetura ES Modules da Onda 2
@@ -145,52 +145,52 @@ function findPatternMatch(text) {
 }
 
 // ============================================================================
-// 4. DOM REFS
+// 4. DOM REFS — IDs adaptados ao index.html v2.2 (kpi-grid + kpi-grid--ops)
 // ============================================================================
 const dom = {
   // Topbar Auth
-  loggedUserDisplay: document.getElementById('loggedUserDisplay'),
+  loggedUserDisplay: document.getElementById('userMenu'),
   logoutBtn:         document.getElementById('logoutBtn'),
 
   clientList:       document.getElementById('clientList'),
-  logsList:         document.getElementById('logsList'),
-  logsMeta:         document.getElementById('logsMeta'),
-  mainTitle:        document.getElementById('mainTitle'),
-  mainSubtitle:     document.getElementById('mainSubtitle'),
+  logsList:         document.getElementById('eventsList'),
+  logsMeta:         document.getElementById('eventsMeta'),
+  mainTitle:        document.getElementById('topbarTitle'),
+  mainSubtitle:     document.getElementById('topbarSubtitle'),
   refreshBtn:       document.getElementById('refreshBtn'),
-  connectionStatus: document.getElementById('connectionStatus'),
+  connectionStatus: document.getElementById('systemStatus'),
 
   // Live Strip
   liveStripList:    document.getElementById('liveStripList'),
   liveStripMeta:    document.getElementById('liveStripMeta'),
 
   // Tabs
-  eventTabs:        document.getElementById('eventTabs'),
+  eventTabs:        document.getElementById('tabsContainer'),
   tabCounts: {
     logs:     document.getElementById('tabCountLogs'),
     auth:     document.getElementById('tabCountAuth'),
     sessions: document.getElementById('tabCountSessions')
   },
 
-  // KPIs operacionais
-  kpiOps: {
+  // KPIs principais (seção kpi-grid)
+  kpiMain: {
+    clientes:  document.getElementById('kpiClientes'),
     online:    document.getElementById('kpiOnline'),
-    logins:    document.getElementById('kpiLogins'),
-    falhas:    document.getElementById('kpiFalhas'),
-    expiradas: document.getElementById('kpiExpiradas')
+    erros24h:  document.getElementById('kpiErros24h'),
+    auth24h:   document.getElementById('kpiAuth24h')
   },
 
-  // KPIs de logs (inclui MTTR — GM-06)
-  kpi: {
-    total:   document.getElementById('kpiTotal'),
-    erros:   document.getElementById('kpiErros'),
-    alertas: document.getElementById('kpiAlertas'),
-    infos:   document.getElementById('kpiInfos'),
-    mttr:    document.getElementById('kpiMttr')
+  // KPIs operacionais (seção kpi-grid--ops)
+  kpiOps: {
+    taxaErro:        document.getElementById('kpiTaxaErro'),
+    loginsFalhos:    document.getElementById('kpiLoginsFalhos'),
+    appsMonitorados: document.getElementById('kpiAppsMonitorados'),
+    totalLogs:       document.getElementById('kpiTotalLogs')
   },
 
+  // Toolbar
   searchInput:      document.getElementById('searchInput'),
-  searchClearBtn:   document.getElementById('searchClearBtn'),
+  searchClearBtn:   document.getElementById('searchClear'),
   severityPills:    document.getElementById('severityPills'),
   pillCountErro:    document.getElementById('pillCountErro'),
   pillCountAlerta:  document.getElementById('pillCountAlerta'),
@@ -198,39 +198,52 @@ const dom = {
   exportCsvBtn:     document.getElementById('exportCsvBtn'),
   exportPdfBtn:     document.getElementById('exportPdfBtn'),
   themeToggleBtn:   document.getElementById('themeToggleBtn'),
-  timeFilterSelect: document.getElementById('timeFilterSelect'),    // [GM-08]
+  timeFilterSelect: document.getElementById('timeRangeSelect'),
 
+  // Capacity drawer
   capacityBtn:            document.getElementById('capacityBtn'),
   capacityBadge:          document.getElementById('capacityBadge'),
   capacityDrawer:         document.getElementById('capacityDrawer'),
-  capacityDrawerSubtitle: document.getElementById('capacityDrawerSubtitle'),
-  capacitySummary:        document.getElementById('capacitySummary'),
-  capacityList:           document.getElementById('capacityList'),
-  capacityMeta:           document.getElementById('capacityMeta'),
+  capacityDrawerSubtitle: null, // não existe no HTML atual — protegido em todos os usos
+  capacitySummary:        document.getElementById('capacityDrawerSummary'),
+  capacityList:           document.getElementById('capacityDrawerBody'),
+  capacityMeta:           document.getElementById('capacityDrawerMeta'),
 
+  // Detail drawer (estrutura simplificada — sem campos pré-prontos no HTML)
   detailDrawer:        document.getElementById('detailDrawer'),
   detailDrawerTitle:   document.getElementById('detailDrawerTitle'),
-  detailDrawerSubtitle:document.getElementById('detailDrawerSubtitle'),
-  detailMeta:          document.getElementById('detailMeta'),
-  detailMessage:       document.getElementById('detailMessage'),
-  detailKbWrap:        document.getElementById('detailKbWrap'),
-  detailKbId:          document.getElementById('detailKbId'),
-  detailKbCat:         document.getElementById('detailKbCat'),
-  detailKbSev:         document.getElementById('detailKbSev'),
-  detailKbTitle:       document.getElementById('detailKbTitle'),
-  detailKbSolucao:     document.getElementById('detailKbSolucao'),
-  detailCopyBtn:       document.getElementById('detailCopyBtn'),
-  detailMetaFoot:      document.getElementById('detailMetaFoot')
+  detailDrawerSubtitle: null,
+  detailDrawerBody:    document.getElementById('detailDrawerBody'),
+  detailMeta:          null,
+  detailMessage:       null,
+  detailKbWrap:        null,
+  detailKbId:          null,
+  detailKbCat:         null,
+  detailKbSev:         null,
+  detailKbTitle:       null,
+  detailKbSolucao:     null,
+  detailCopyBtn:       document.getElementById('detailDrawerCopyBtn'),
+  detailMetaFoot:      null
+};
+
+// Compat com código que ainda usa dom.kpi.* (algumas partes legacy do admin.js)
+// Aponta pros novos KPIs principais (manter consistência sem quebrar nada).
+dom.kpi = {
+  total:   dom.kpiOps.totalLogs,
+  erros:   dom.kpiMain.erros24h,
+  alertas: null,
+  infos:   null,
+  mttr:    null
 };
 
 const modal = {
-  root:      document.getElementById('clientModal'),
-  form:      document.getElementById('clientForm'),
-  fldId:     document.getElementById('fldClientId'),
-  fldName:   document.getElementById('fldClientName'),
-  fldActive: document.getElementById('fldClientActive'),
-  saveBtn:   document.getElementById('clientSaveBtn'),
-  formError: document.getElementById('clientFormError'),
+  root:      document.getElementById('newClientModal'),
+  form:      document.getElementById('newClientForm'),
+  fldId:     document.getElementById('ncIdCliente'),
+  fldName:   document.getElementById('ncNome'),
+  fldActive: null, // não existe no HTML — wizard usa 'ativo' default true
+  saveBtn:   document.getElementById('newClientSubmitBtn'),
+  formError: document.getElementById('newClientFormError'),
   openBtn:   document.getElementById('newClientBtn')
 };
 
@@ -673,13 +686,13 @@ function buildClientItem({ id, nome, count, ativo, modificador }) {
 }
 
 // ============================================================================
-// 9. RENDER LAYER — Main (header / KPIs / live strip / tabs / toolbar / pills)
+// 9. RENDER LAYER — Main + KPIs híbridos (consistentes com filtro de cliente)
 // ============================================================================
 function renderMain() {
   renderHeader();
-  renderKPIsOps();
+  renderKPIsMain();      // 4 cards principais
+  renderKPIsOps();       // 4 cards operacionais
   renderLiveStrip();
-  renderKPIsLogs();
   renderTabs();
   renderToolbarVisibility();
   renderSeverityPills();
@@ -694,12 +707,12 @@ function renderHeader() {
   const nome = getNomeCliente(state.filtroClienteId);
 
   if (dom.mainTitle) {
-    dom.mainTitle.textContent = filtrando ? nome : 'Visão Geral';
+    dom.mainTitle.textContent = filtrando ? nome : 'Central de Desenvolvedor';
   }
   if (dom.mainSubtitle) {
     dom.mainSubtitle.textContent = filtrando
       ? `Telemetria isolada do cliente ${nome}`
-      : 'Telemetria consolidada de todos os ecossistemas';
+      : 'God Mode';
   }
 
   const ts = state.geradoEm ? `· atualizado ${relativeTime(state.geradoEm)}` : '';
@@ -710,26 +723,109 @@ function renderHeader() {
   }
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// MOTOR DE KPIs — Híbrido inteligente
+//   • filtro = '' (Todos) → usa data.totais / data.operacionais (fonte do backend)
+//   • filtro = 'crv'      → recalcula em cima de state.logs/eventosAuth/sessoesAtivas
+//                            (consistente com o que está na tela)
+// ────────────────────────────────────────────────────────────────────────────
+
+const _MS_24H = 24 * 60 * 60 * 1000;
+
+function _isWithin24h(iso) {
+  if (!iso) return false;
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return false;
+  return (Date.now() - t) <= _MS_24H;
+}
+
+/**
+ * Calcula os KPIs do contexto atual (respeitando filtro de cliente).
+ * Retorna sempre o mesmo shape, vindo do backend ou recalculado no frontend.
+ */
+function computeKPIs() {
+  const totais       = state.totais       || {};
+  const operacionais = state.operacionais || {};
+  const filtroAtivo  = !!state.filtroClienteId;
+
+  if (!filtroAtivo) {
+    // ── MODO GLOBAL: backend é a fonte da verdade ───────────────────────
+    return {
+      clientes:        Number(totais.clientes ?? state.clientes.length) || 0,
+      online:          Number(operacionais.appsMonitorados ?? state.sessoesAtivas.length) || state.sessoesAtivas.length,
+      erros24h:        Number(totais.erros24h ?? operacionais.erros24h ?? 0),
+      auth24h:         Number(totais.autenticacoes24h ?? 0),
+      taxaErro:        Number(operacionais.taxaErro ?? 0),
+      loginsFalhos24h: Number(operacionais.loginsFalhos24h ?? 0),
+      appsMonitorados: Number(operacionais.appsMonitorados ?? state.saudeApps.length) || state.saudeApps.length,
+      totalLogs:       Number(totais.logs ?? state.logs.length) || state.logs.length
+    };
+  }
+
+  // ── MODO FILTRADO: recalcula sobre os dados já filtrados por cliente ─
+  const cid = String(state.filtroClienteId);
+
+  const logsCli = state.logs.filter(l => String(l.idCliente) === cid);
+  const authCli = state.eventosAuth.filter(a => String(a.idCliente) === cid);
+  const sessCli = state.sessoesAtivas.filter(s => String(s.idCliente) === cid);
+  const appsCli = state.saudeApps.filter(a => String(a.idCliente) === cid);
+
+  const logs24h     = logsCli.filter(l => _isWithin24h(l.timestamp));
+  const erros24h    = logs24h.filter(l => String(l.tipoLog || '').toUpperCase() === 'ERRO').length;
+  const auth24h     = authCli.filter(a => _isWithin24h(a.timestamp)).length;
+  const loginsFalhos24h = authCli.filter(a =>
+    _isWithin24h(a.timestamp) &&
+    String(a.tipoEvento || '').toUpperCase() === 'LOGIN_FALHA'
+  ).length;
+
+  const taxaErro = logs24h.length > 0
+    ? (erros24h / logs24h.length) * 100
+    : 0;
+
+  return {
+    clientes:        1,                    // o filtrado em si conta como 1
+    online:          sessCli.length,
+    erros24h:        erros24h,
+    auth24h:         auth24h,
+    taxaErro:        taxaErro,
+    loginsFalhos24h: loginsFalhos24h,
+    appsMonitorados: appsCli.length,
+    totalLogs:       logsCli.length
+  };
+}
+
+function _formatTaxaErro(n) {
+  if (!Number.isFinite(n)) return '—';
+  // Se já vier formatado como string do backend, normaliza
+  if (typeof n === 'string') return n;
+  if (n === 0) return '0%';
+  if (n < 1)  return n.toFixed(2) + '%';
+  if (n < 10) return n.toFixed(1) + '%';
+  return Math.round(n) + '%';
+}
+
+function renderKPIsMain() {
+  const k = computeKPIs();
+  if (dom.kpiMain.clientes) dom.kpiMain.clientes.textContent = formatNumber(k.clientes);
+  if (dom.kpiMain.online)   dom.kpiMain.online.textContent   = formatNumber(k.online);
+  if (dom.kpiMain.erros24h) dom.kpiMain.erros24h.textContent = formatNumber(k.erros24h);
+  if (dom.kpiMain.auth24h)  dom.kpiMain.auth24h.textContent  = formatNumber(k.auth24h);
+}
+
 function renderKPIsOps() {
-  const ops = state.operacionais || {};
-  if (dom.kpiOps.online)    dom.kpiOps.online.textContent    = formatNumber(ops.onlineAgora);
-  if (dom.kpiOps.logins)    dom.kpiOps.logins.textContent    = formatNumber(ops.loginsHoje);
-  if (dom.kpiOps.falhas)    dom.kpiOps.falhas.textContent    = formatNumber(ops.falhasLoginHoje);
-  if (dom.kpiOps.expiradas) dom.kpiOps.expiradas.textContent = formatNumber(ops.sessoesExpiradasHoje);
+  const k = computeKPIs();
+  if (dom.kpiOps.taxaErro) {
+    // Backend pode mandar string formatada ou número; trata ambos
+    const tx = (typeof k.taxaErro === 'string')
+      ? k.taxaErro
+      : _formatTaxaErro(k.taxaErro);
+    dom.kpiOps.taxaErro.textContent = tx;
+  }
+  if (dom.kpiOps.loginsFalhos)    dom.kpiOps.loginsFalhos.textContent    = formatNumber(k.loginsFalhos24h);
+  if (dom.kpiOps.appsMonitorados) dom.kpiOps.appsMonitorados.textContent = formatNumber(k.appsMonitorados);
+  if (dom.kpiOps.totalLogs)       dom.kpiOps.totalLogs.textContent       = formatNumber(k.totalLogs);
 }
 
-function renderKPIsLogs() {
-  const logsFiltrados = getLogsFiltradosCliente();
-  const kpis = calcularKPIsLogs(logsFiltrados);
-  if (dom.kpi.total)   dom.kpi.total.textContent   = formatNumber(kpis.total);
-  if (dom.kpi.erros)   dom.kpi.erros.textContent   = formatNumber(kpis.erros);
-  if (dom.kpi.alertas) dom.kpi.alertas.textContent = formatNumber(kpis.alertas);
-  if (dom.kpi.infos)   dom.kpi.infos.textContent   = formatNumber(kpis.infos);
-
-  // [GM-06] MTTR
-  const mttr = calcularMTTR(logsFiltrados);
-  if (dom.kpi.mttr) dom.kpi.mttr.textContent = mttr ? mttr : 'N/A';
-}
 
 // Render Live Strip / Tabs / Toolbar / Pills / Search Clear continuam na Parte A2
 // ============================================================================
