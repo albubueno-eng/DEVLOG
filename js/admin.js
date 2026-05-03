@@ -24,9 +24,9 @@ import {
   STORAGE_KEYS,
   ROUTES,
   REFRESH_INTERVAL_MS,
-  LIMITS,
   THEME_DEFAULT
 } from './config.js';
+
 
 import { apiPost, apiGet } from './api.js';
 import { requireAuth, validateSessionOnBoot, logout, getUserContext } from './auth.js';
