@@ -2530,3 +2530,44 @@ body[data-portal="admin"] .modal {
   .modal { padding: 12px; }
   .modal__dialog { max-height: calc(100vh - 24px); }
 }
+
+
+/* =============================================================================
+   FAB — Botão flutuante "Novo Cliente" (mobile only)
+   ============================================================================= */
+.fab-novo-cliente {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: var(--color-accent, #2563eb);
+  color: #fff;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+  z-index: 800;
+  display: none;             /* oculto por padrão */
+  align-items: center;
+  justify-content: center;
+  transition: transform .15s, box-shadow .15s;
+}
+.fab-novo-cliente:hover {
+  transform: scale(1.05);
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.5);
+}
+.fab-novo-cliente:active {
+  transform: scale(0.95);
+}
+
+/* Só aparece em mobile/tablet pequeno */
+@media (max-width: 768px) {
+  .fab-novo-cliente { display: flex; }
+}
+
+/* Esconde quando o modal está aberto (não atrapalhar UI) */
+body:has(.modal:not([hidden])) .fab-novo-cliente { display: none; }
