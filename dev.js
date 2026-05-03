@@ -574,15 +574,37 @@
  // ==========================================================================
   // 7. RENDER LAYER — Sidebar
   // ==========================================================================
+ // ==========================================================================
+  // 7. RENDER LAYER — Sidebar (ATUALIZADO PARA HEATMAP DE ERROS)
+  // ==========================================================================
+  function contarErrosAbertosPorCliente() {
+    const map = new Map();
+    let totalErros = 0;
+    for (const l of state.logs) {
+      const id = String(l.idCliente);
+      const isErro = String(l.tipoLog || '').toUpperCase() === 'ERRO';
+      const isAberto = String(l.status || 'ABERTO').toUpperCase() !== 'RESOLVIDO';
+      
+      if (!map.has(id)) map.set(id, 0); // inicializa
+      
+      if (isErro && isAberto) {
+        map.set(id, map.get(id) + 1);
+        totalErros++;
+      }
+    }
+    return { map, totalErros };
+  }
+
   function renderSidebar() {
     const ul = dom.clientList;
     ul.textContent = '';
-    const contagens = contarLogsPorCliente();
+    const { map: contagensErros, totalErros } = contarErrosAbertosPorCliente();
     const ativoId = state.filtroClienteId;
 
+    // Item "Todos os Clientes"
     ul.appendChild(buildClientItem({
       id: '', nome: 'Todos os Clientes',
-      count: state.logs.length, ativo: ativoId === '',
+      count: totalErros, ativo: ativoId === '',
       modificador: 'client-item--all'
     }));
 
@@ -594,11 +616,12 @@
       return;
     }
 
+    // Itens individuais por cliente
     for (const c of state.clientes) {
       const id = String(c.idCliente);
       ul.appendChild(buildClientItem({
         id, nome: c.nomeCliente || id,
-        count: contagens.get(id) || 0,
+        count: contagensErros.get(id) || 0,
         ativo: ativoId === id
       }));
     }
@@ -619,7 +642,16 @@
 
     const countEl = document.createElement('span');
     countEl.className = 'client-item__count';
-    countEl.textContent = formatNumber(count);
+    
+    // UX Sênior: Se tiver erro crítico aberto, fica VERMELHO. Se não, fica um "0" sutil.
+    if (count > 0) {
+      countEl.style.backgroundColor = 'rgba(239, 68, 68, 0.15)';
+      countEl.style.color = '#EF4444';
+      countEl.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+      countEl.style.fontWeight = 'bold';
+    }
+    
+    countEl.textContent = count;
 
     btn.appendChild(nameEl);
     btn.appendChild(countEl);
