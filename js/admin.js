@@ -2119,15 +2119,24 @@ function bindEvents() {
 // 19. CLIENT MODAL (validação anti-duplicata + auto-sanitize)
 // ============================================================================
 function openClientModal() {
-  if (!modal.root) return;
-  modal.form.reset();
-  if (modal.fldActive) modal.fldActive.checked = true;
-  if (modal.formError) modal.formError.hidden = true;
-  clearFieldErrors();
-  modal.root.hidden = false;
-  modal.root.setAttribute('aria-hidden', 'false');
-  requestAnimationFrame(() => modal.fldId && modal.fldId.focus());
+  // Delegado ao handler novo (Patch 1 do formulário inteligente)
+  if (typeof window.openNewClientModal === 'function') {
+    return window.openNewClientModal();
+  }
+  // Fallback: abre direto sem reset
+  const modal = document.getElementById('newClientModal');
+  if (!modal) {
+    console.error('[openClientModal] modal não encontrado');
+    return;
+  }
+  const form = document.getElementById('formNovoCliente');
+  if (form && typeof form.reset === 'function') {
+    form.reset();
+  }
+  modal.hidden = false;
+  modal.removeAttribute('aria-hidden');
 }
+
 
 function closeClientModal() {
   if (!modal.root) return;
@@ -2540,45 +2549,47 @@ if (document.readyState === 'loading') {
 
   // ---------- validação por campo (blur / input) ----------
   function validateField(name) {
-    const v = (fields[name === 'corPrim' ? 'corPrim' : name]?.value || '').trim();
-    switch (name) {
-      case 'idCliente':
-        if (!v) return setError('idCliente', 'Obrigatório.');
-        if (!/^[a-z0-9_-]{2,32}$/.test(v))
-          return setError('idCliente', 'Use 2-32 caracteres: a-z, 0-9, _ ou -.');
-        return setValid('idCliente');
-
-      case 'razaoSocial':
-        if (!v) return setError('razaoSocial', 'Obrigatório.');
-        if (v.length < 3) return setError('razaoSocial', 'Mínimo 3 caracteres.');
-        return setValid('razaoSocial');
-
-      case 'cnpj':
-        if (!v) return setError('cnpj', 'Obrigatório.');
-        const d = v.replace(/\D/g, '');
-        if (d.length !== 14) return setError('cnpj', 'CNPJ deve ter 14 dígitos.');
-        if (!validarCnpj(v)) return setError('cnpj', 'CNPJ inválido (dígito verificador).');
-        return setValid('cnpj');
-
-      case 'email':
-        if (!v) { clearState('email'); return; } // opcional
-        if (!validarEmail(v)) return setError('email', 'Email inválido.');
-        return setValid('email');
-
-      case 'quota':
-        const n = Number(v);
-        if (!v) return setError('quotaFuncionarios', 'Obrigatório.');
-        if (!Number.isFinite(n) || n < 1 || n > 500)
-          return setError('quotaFuncionarios', 'Entre 1 e 500.');
-        return setValid('quotaFuncionarios');
-
-      case 'corPrim':
-        if (!v) { clearState('corPrimaria'); return; }
-        if (!/^#[0-9a-fA-F]{6}$/.test(v))
-          return setError('corPrimaria', 'Use formato #RRGGBB.');
-        return setValid('corPrimaria');
+  const v = (fields[name === 'corPrim' ? 'corPrim' : (name === 'quota' ? 'quota' : name)]?.value || '').trim();
+  switch (name) {
+    case 'idCliente': {
+      if (!v) return setError('idCliente', 'Obrigatório.');
+      if (!/^[a-z0-9_-]{2,32}$/.test(v))
+        return setError('idCliente', 'Use 2-32 caracteres: a-z, 0-9, _ ou -.');
+      return setValid('idCliente');
+    }
+    case 'razaoSocial': {
+      if (!v) return setError('razaoSocial', 'Obrigatório.');
+      if (v.length < 3) return setError('razaoSocial', 'Mínimo 3 caracteres.');
+      return setValid('razaoSocial');
+    }
+    case 'cnpj': {
+      if (!v) return setError('cnpj', 'Obrigatório.');
+      const d = v.replace(/\D/g, '');
+      if (d.length !== 14) return setError('cnpj', 'CNPJ deve ter 14 dígitos.');
+      if (!validarCnpj(v)) return setError('cnpj', 'CNPJ inválido (dígito verificador).');
+      return setValid('cnpj');
+    }
+    case 'email': {
+      if (!v) { clearState('email'); return; }
+      if (!validarEmail(v)) return setError('email', 'Email inválido.');
+      return setValid('email');
+    }
+    case 'quota': {
+      const n = Number(v);
+      if (!v) return setError('quotaFuncionarios', 'Obrigatório.');
+      if (!Number.isFinite(n) || n < 1 || n > 500)
+        return setError('quotaFuncionarios', 'Entre 1 e 500.');
+      return setValid('quotaFuncionarios');
+    }
+    case 'corPrim': {
+      if (!v) { clearState('corPrimaria'); return; }
+      if (!/^#[0-9a-fA-F]{6}$/.test(v))
+        return setError('corPrimaria', 'Use formato #RRGGBB.');
+      return setValid('corPrimaria');
     }
   }
+}
+
 
   fields.idCliente?.addEventListener('blur',  () => validateField('idCliente'));
   fields.razaoSocial?.addEventListener('blur', () => validateField('razaoSocial'));
@@ -2652,102 +2663,249 @@ if (document.readyState === 'loading') {
   });
 
   // ---------- submit ----------
-  form.addEventListener('submit', async (ev) => {
-    ev.preventDefault();
-    clearAllErrors();
+ form.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  console.log('[novoCliente] submit disparado');
+  clearAllErrors();
 
-    // valida todos
-    ['idCliente', 'razaoSocial', 'cnpj', 'email', 'quota', 'corPrim'].forEach(validateField);
+  ['idCliente', 'razaoSocial', 'cnpj', 'email', 'quota', 'corPrim'].forEach(validateField);
 
-    const hasError = form.querySelectorAll('.form__field.is-invalid').length > 0;
-    if (hasError) {
-      showBanner('Corrija os campos destacados antes de continuar.', 'error');
-      const first = form.querySelector('.form__field.is-invalid input, .form__field.is-invalid select');
-      first?.focus();
-      return;
-    }
+  const invalidFields = form.querySelectorAll('.form__field.is-invalid');
+  console.log('[novoCliente] campos inválidos:', invalidFields.length);
 
-    // monta payload
-    const payload = {
-      idCliente:         fields.idCliente.value.trim(),
-      nome:              fields.razaoSocial.value.trim(),
-      nomeFantasia:      fields.nomeFantasia.value.trim() || fields.razaoSocial.value.trim(),
-      cnpj:              fields.cnpj.value.replace(/\D/g, ''),
-      email:             fields.email.value.trim(),
-      telefone:          fields.telefone.value.trim(),
-      plano:             fields.plano.value,
-      quotaFuncionarios: Number(fields.quota.value),
-      logoUrl:           fields.logoUrl.value.trim(),
-      corPrimaria:       fields.corPrim.value.trim() || '#2563eb',
-    };
+  if (invalidFields.length > 0) {
+    showBanner('Corrija os campos destacados antes de continuar.', 'error');
+    const first = form.querySelector('.form__field.is-invalid input, .form__field.is-invalid select');
+    first?.focus();
+    return;
+  }
 
-    // estado de loading
-    submitBtn.disabled = true;
-    if (btnLabel)   btnLabel.textContent = 'Cadastrando…';
-    if (btnSpinner) btnSpinner.hidden = false;
+  const payload = {
+    idCliente:         fields.idCliente.value.trim(),
+    nome:              fields.razaoSocial.value.trim(),
+    nomeFantasia:      fields.nomeFantasia.value.trim() || fields.razaoSocial.value.trim(),
+    cnpj:              fields.cnpj.value.replace(/\D/g, ''),
+    email:             fields.email.value.trim(),
+    telefone:          fields.telefone.value.trim(),
+    plano:             fields.plano.value,
+    quotaFuncionarios: Number(fields.quota.value),
+    logoUrl:           fields.logoUrl.value.trim(),
+    corPrimaria:       fields.corPrim.value.trim() || '#2563eb',
+  };
+  console.log('[novoCliente] payload:', payload);
 
-    try {
-      // Tenta usar a API global do admin.js
-      let resp;
-      if (typeof adminApiPost === 'function') {
-        resp = await adminApiPost('createClient', payload);
-      } else if (window.__adminApi?.post) {
-        resp = await window.__adminApi.post('createClient', payload);
+  submitBtn.disabled = true;
+  if (btnLabel)   btnLabel.textContent = 'Cadastrando…';
+  if (btnSpinner) btnSpinner.hidden = false;
+
+  try {
+    // Resolve URL e API key de várias fontes possíveis
+    const SCRIPT_URL =
+      window.CONFIG?.SCRIPT_URL ||
+      window.SCRIPT_URL ||
+      (typeof CONFIG !== 'undefined' ? CONFIG.SCRIPT_URL : null);
+
+    const API_KEY =
+      window.CONFIG?.API_KEY ||
+      window.API_KEY ||
+      (typeof CONFIG !== 'undefined' ? CONFIG.API_KEY : null);
+
+    if (!SCRIPT_URL) throw new Error('SCRIPT_URL não configurada');
+    if (!API_KEY)    throw new Error('API_KEY não configurada');
+
+    const token = localStorage.getItem('gm_token');
+    if (!token) throw new Error('Sessão expirada — faça login novamente');
+
+    console.log('[novoCliente] POST', SCRIPT_URL);
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        apiKey: API_KEY,
+        token:  token,
+        action: 'createClient',
+        ...payload,
+      }),
+    });
+
+    const txt = await res.text();
+    console.log('[novoCliente] resposta:', txt);
+
+    let json;
+    try { json = JSON.parse(txt); }
+    catch { throw new Error('Resposta inválida do servidor: ' + txt.slice(0, 100)); }
+
+    if (!json.ok) throw new Error(json.error || 'Falha desconhecida');
+
+    showBanner('✓ Cliente cadastrado com sucesso!', 'success');
+    setTimeout(() => {
+      if (typeof window.closeNewClientModal === 'function') {
+        window.closeNewClientModal();
       } else {
-        // fallback direto
-        const res = await fetch(window.CONFIG?.SCRIPT_URL || window.SCRIPT_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            apiKey: window.CONFIG?.API_KEY || window.API_KEY,
-            token:  localStorage.getItem('gm_token'),
-            action: 'createClient',
-            ...payload,
-          }),
-        });
-        const json = await res.json();
-        if (!json.ok) throw new Error(json.error || 'Falha desconhecida');
-        resp = json.data || json;
-      }
-
-      showBanner('✓ Cliente cadastrado com sucesso!', 'success');
-      // espera 800ms e fecha modal + recarrega
-      setTimeout(() => {
         const modal = form.closest('.modal');
-        if (modal) {
-          modal.hidden = true;
-          modal.setAttribute('aria-hidden', 'true');
-        }
-        form.reset();
-        clearAllErrors();
-        if (logoPreview) logoPreview.innerHTML = '<span class="logo-uploader__placeholder">Sem logo</span>';
-        if (logoRemoveBtn) logoRemoveBtn.hidden = true;
-        // recarrega dashboard
-        if (typeof loadData === 'function') loadData();
-      }, 800);
-
-    } catch (err) {
-      console.error('[createClient]', err);
-      const msg = err?.message || String(err);
-
-      // mensagens contextuais
-      if (/já existe|exists/i.test(msg)) {
-        setError('idCliente', 'Este idCliente já está em uso.');
-        showBanner('idCliente duplicado. Escolha outro.', 'error');
-      } else if (/cnpj/i.test(msg)) {
-        setError('cnpj', msg);
-      } else if (/permissão|permission|admin/i.test(msg)) {
-        showBanner('Sem permissão. Apenas administradores podem cadastrar clientes.', 'error');
-      } else {
-        showBanner('Falha ao cadastrar: ' + msg, 'error');
+        if (modal) modal.hidden = true;
       }
-    } finally {
-      submitBtn.disabled = false;
-      if (btnLabel)   btnLabel.textContent = 'Cadastrar cliente';
-      if (btnSpinner) btnSpinner.hidden = true;
+      form.reset();
+      clearAllErrors();
+      if (logoPreview)   logoPreview.innerHTML = '<span class="logo-uploader__placeholder">Sem logo</span>';
+      if (logoRemoveBtn) logoRemoveBtn.hidden = true;
+      if (typeof loadData === 'function') loadData();
+    }, 800);
+
+  } catch (err) {
+    console.error('[novoCliente] erro:', err);
+    const msg = err?.message || String(err);
+
+    if (/já existe|exists/i.test(msg)) {
+      setError('idCliente', 'Este idCliente já está em uso.');
+      showBanner('idCliente duplicado. Escolha outro.', 'error');
+    } else if (/cnpj/i.test(msg)) {
+      setError('cnpj', msg);
+    } else if (/permissão|permission|admin/i.test(msg)) {
+      showBanner('Sem permissão. Apenas administradores podem cadastrar clientes.', 'error');
+    } else if (/sessão|session|token/i.test(msg)) {
+      showBanner('Sessão expirada — faça login novamente.', 'error');
+    } else {
+      showBanner('Falha ao cadastrar: ' + msg, 'error');
     }
-  });
+  } finally {
+    submitBtn.disabled = false;
+    if (btnLabel)   btnLabel.textContent = 'Cadastrar cliente';
+    if (btnSpinner) btnSpinner.hidden = true;
+  }
+});
 
   console.log('[novoCliente] formulário inteligente inicializado');
 })();
 
+/* =============================================================================
+   PATCH — Garante abertura do modal "Novo Cliente" pelo botão da sidebar/FAB
+   ============================================================================= */
+(function ensureNewClientModalOpens() {
+  const MODAL_ID = 'newClientModal';
+
+  function openModal() {
+    const modal = document.getElementById(MODAL_ID);
+    if (!modal) {
+      console.error('[novoCliente] modal #' + MODAL_ID + ' não encontrado no DOM');
+      return;
+    }
+    modal.hidden = false;
+    modal.removeAttribute('aria-hidden');
+    modal.setAttribute('aria-modal', 'true');
+    document.body.style.overflow = 'hidden'; // trava scroll de fundo
+
+    // foco no primeiro input
+    setTimeout(() => {
+      modal.querySelector('input, select, textarea')?.focus();
+    }, 50);
+  }
+
+  function closeModal() {
+    const modal = document.getElementById(MODAL_ID);
+    if (!modal) return;
+    modal.hidden = true;
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+  }
+
+  // Expõe globais p/ debug e p/ outros módulos
+  window.openNewClientModal  = openModal;
+  window.closeNewClientModal = closeModal;
+
+  // Listener delegado: pega QUALQUER clique em elemento que pareça "abrir novo cliente"
+  document.addEventListener('click', (ev) => {
+    const t = ev.target.closest(
+      '[data-action="novo-cliente"], #btnNovoCliente, #fabNovoCliente, .btn-novo-cliente'
+    );
+    if (t) {
+      ev.preventDefault();
+      openModal();
+      return;
+    }
+    // Fallback por texto (caso o botão da sidebar não tenha id/data conhecidos)
+    const byText = ev.target.closest('button, a');
+    if (byText && /(\+\s*)?novo\s*cliente/i.test(byText.textContent || '')) {
+      // só abre se não for botão dentro do próprio modal (evita loop)
+      if (!byText.closest('#' + MODAL_ID)) {
+        ev.preventDefault();
+        openModal();
+      }
+    }
+  });
+
+  // Listener para fechar (X, backdrop, botão Cancelar)
+  document.addEventListener('click', (ev) => {
+    const closer = ev.target.closest('[data-close], .modal__close, #newClientCloseBtn');
+    if (closer && closer.closest('#' + MODAL_ID)) {
+      ev.preventDefault();
+      closeModal();
+    }
+  });
+
+  // ESC fecha
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape') {
+      const modal = document.getElementById(MODAL_ID);
+      if (modal && !modal.hidden) closeModal();
+    }
+  });
+
+  console.log('[novoCliente] handlers de abertura/fechamento instalados');
+})();
+
+/* =============================================================================
+   PATCH — FAB "+" auto-injetado (mobile only)
+   Não precisa editar HTML. Aparece apenas em telas <= 768px.
+   ============================================================================= */
+(function injectFAB() {
+  if (document.getElementById('fabNovoCliente')) return; // já existe
+
+  const fab = document.createElement('button');
+  fab.id = 'fabNovoCliente';
+  fab.type = 'button';
+  fab.setAttribute('aria-label', 'Novo Cliente');
+  fab.title = 'Novo Cliente';
+  fab.textContent = '+';
+
+  // Estilos inline garantem que aparece mesmo se o CSS não carregar
+  Object.assign(fab.style, {
+    position:   'fixed',
+    right:      '20px',
+    bottom:     '20px',
+    width:      '56px',
+    height:     '56px',
+    borderRadius: '50%',
+    border:     'none',
+    background: '#2563eb',
+    color:      '#fff',
+    fontSize:   '32px',
+    fontWeight: '600',
+    lineHeight: '1',
+    cursor:     'pointer',
+    boxShadow:  '0 6px 16px rgba(37, 99, 235, 0.4)',
+    zIndex:     '800',
+    display:    'none',          // controlado por media query abaixo
+    alignItems: 'center',
+    justifyContent: 'center',
+  });
+
+  document.body.appendChild(fab);
+
+  // Media query controla visibilidade
+  function updateVisibility() {
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+    const modalOpen = !!document.querySelector('.modal:not([hidden])');
+    fab.style.display = (isMobile && !modalOpen) ? 'flex' : 'none';
+  }
+  updateVisibility();
+  window.addEventListener('resize', updateVisibility);
+
+  // Atualiza visibilidade quando modal abre/fecha
+  const observer = new MutationObserver(updateVisibility);
+  document.querySelectorAll('.modal').forEach(m => {
+    observer.observe(m, { attributes: true, attributeFilter: ['hidden'] });
+  });
+
+  console.log('[FAB] injetado e ativo (mobile <= 768px)');
+})();
