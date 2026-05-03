@@ -179,6 +179,7 @@
     pillCountAlerta:  document.getElementById('pillCountAlerta'),
     pillCountInfo:    document.getElementById('pillCountInfo'),
     exportCsvBtn:     document.getElementById('exportCsvBtn'),
+    exportPdfBtn:     document.getElementById('exportPdfBtn'),
     themeToggleBtn:   document.getElementById('themeToggleBtn'),
     timeFilterSelect: document.getElementById('timeFilterSelect'), // <-- [GM-08] Adicione esta linha
 
@@ -1425,7 +1426,7 @@
   }
 
   // ==========================================================================
-  // 15. EXPORT CSV
+  // 15. EXPORT CSV & PDF [GM-09]
   // ==========================================================================
   const CSV_HEADERS = {
     logs:     ['timestamp', 'tipoLog', 'idCliente', 'cliente', 'aplicativo', 'usuario', 'dispositivo', 'mensagemErro'],
@@ -1437,7 +1438,7 @@
     const tab = state.activeTab;
     const items = getEventsForActiveTab();
     if (!items.length) {
-      flashExportButton('Nada para exportar');
+      flashExportButton('Nada para exportar', dom.exportCsvBtn);
       return;
     }
     const headers = CSV_HEADERS[tab];
@@ -1465,7 +1466,54 @@
       URL.revokeObjectURL(url);
     }, 0);
 
-    flashExportButton(`✓ ${items.length} linha(s)`);
+    flashExportButton(`✓ ${items.length} linha(s)`, dom.exportCsvBtn);
+  }
+
+  // [GM-09] EXPORTAR PDF (AutoTable)
+  function exportCurrentTabAsPDF() {
+    const tab = state.activeTab;
+    const items = getEventsForActiveTab();
+    if (!items.length) {
+      flashExportButton('Vazio', dom.exportPdfBtn);
+      return;
+    }
+
+    try {
+      const { jsPDF } = window.jspdf;
+      // 'l' para landscape (paisagem), 'pt' para pontos, 'a4'
+      const doc = new jsPDF('l', 'pt', 'a4'); 
+      
+      const headers = CSV_HEADERS[tab];
+      const body = items.map(item => {
+        const enriched = { ...item, cliente: getNomeCliente(item.idCliente) };
+        return headers.map(h => String(enriched[h] || ''));
+      });
+
+      const titles = { logs: 'Logs e Erros', auth: 'Autenticações', sessions: 'Sessões Ativas' };
+      const title = `Relatório God Mode - ${titles[tab] || tab.toUpperCase()}`;
+      
+      doc.setFontSize(16);
+      doc.text(title, 40, 40);
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, 40, 55);
+
+      doc.autoTable({
+        startY: 70,
+        head: [headers],
+        body: body,
+        theme: 'striped',
+        styles: { fontSize: 8, cellPadding: 4 },
+        headStyles: { fillColor: [11, 27, 51], textColor: 255 }, // Azul do God Mode
+        alternateRowStyles: { fillColor: [245, 247, 250] }
+      });
+
+      doc.save(buildCsvFilename(tab).replace('.csv', '.pdf'));
+      flashExportButton('✓ Gerado', dom.exportPdfBtn);
+    } catch (e) {
+      console.error(e);
+      flashExportButton('Erro', dom.exportPdfBtn);
+    }
   }
 
   function csvEscape(value) {
@@ -1491,19 +1539,20 @@
       .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   }
 
-  function flashExportButton(msg) {
-    if (!dom.exportCsvBtn) return;
-    const span = dom.exportCsvBtn.querySelector('span');
+  function flashExportButton(msg, btnElement) {
+    const btn = btnElement || dom.exportCsvBtn;
+    if (!btn) return;
+    const span = btn.querySelector('span');
     if (!span) return;
     const original = span.textContent;
     span.textContent = msg;
-    dom.exportCsvBtn.disabled = true;
+    btn.disabled = true;
     setTimeout(() => {
       span.textContent = original;
-      dom.exportCsvBtn.disabled = false;
+      btn.disabled = false;
     }, 1400);
   }
-
+  
   // ==========================================================================
   // 16. CAPACITY DRAWER
   // ==========================================================================
@@ -1750,6 +1799,9 @@
  // ==========================================================================
   // 17. EVENTS
   // ==========================================================================
+// ==========================================================================
+  // 17. EVENTS
+  // ==========================================================================
   function bindEvents() {
     
     // GM-03: LOGOUT BUTTON ────────────────────────────────────────────────
@@ -1816,8 +1868,12 @@
       });
     }
 
+    // [GM-09] EXPORT BUTTONS ──────────────────────────────────────────────
     if (dom.exportCsvBtn) {
       dom.exportCsvBtn.addEventListener('click', exportCurrentTabAsCSV);
+    }
+    if (dom.exportPdfBtn) {
+      dom.exportPdfBtn.addEventListener('click', exportCurrentTabAsPDF);
     }
 
     if (dom.themeToggleBtn) {
@@ -1907,6 +1963,7 @@
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
   }
+  
   // ==========================================================================
   // 18. CLIENT MODAL
   // ==========================================================================
