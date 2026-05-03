@@ -527,7 +527,8 @@
     });
   }
 
-  // Dispatcher atualizado com o pipeline de tempo
+
+  // [GM-08] Dispatcher atualizado com o pipeline de tempo
   function getEventsForActiveTab() {
     if (state.activeTab === 'auth') {
       const auth = getAuthFiltradosCliente();
@@ -545,44 +546,10 @@
     const tempoFiltrado = applyTimeFilter(s);
     return applySearchFilter(tempoFiltrado, 'logs');
   }
-    if (kind === 'auth') {
-      return items.filter(a =>
-        contains(a.aplicativo, q) ||
-        contains(a.usuario, q) ||
-        contains(a.dispositivo, q) ||
-        contains(a.tipoEvento, q) ||
-        contains(a.detalhes, q) ||
-        contains(getNomeCliente(a.idCliente), q)
-      );
-    }
-    return items.filter(s =>
-      contains(s.aplicativo, q) ||
-      contains(s.usuario, q) ||
-      contains(s.dispositivo, q) ||
-      contains(getNomeCliente(s.idCliente), q)
-    );
-  }
 
   function contains(field, q) {
     if (field === null || field === undefined) return false;
     return String(field).toLowerCase().includes(q);
-  }
-
-  function getEventsForActiveTab() {
-    if (state.activeTab === 'auth') {
-      const auth = getAuthFiltradosCliente();
-      const tempoFiltrado = applyTimeFilter(auth);
-      return applySearchFilter(tempoFiltrado, 'auth');
-    }
-    if (state.activeTab === 'sessions') {
-      const ses = getSessoesFiltradasCliente();
-      const tempoFiltrado = applyTimeFilter(ses);
-      return applySearchFilter(tempoFiltrado, 'sessions');
-    }
-    const c = getLogsFiltradosCliente();
-    const s = applySeverityFilter(c);
-    const tempoFiltrado = applyTimeFilter(s);
-    return applySearchFilter(tempoFiltrado, 'logs');
   }
 
   const CAP_STATUS_ORDER = ['CRITICO', 'ALERTA', 'ATENCAO', 'OFFLINE', 'PENDING', 'SAUDAVEL', 'MIGRADO'];
