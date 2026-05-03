@@ -2908,7 +2908,7 @@ if (document.readyState === 'loading') {
   });
 
   console.log('[FAB] injetado e ativo (mobile <= 768px)');
-})();
+}
 
 /* =========================================================
  * Monitor de Clientes – v3 (URL/API_KEY auto-detectados + #capacityBtn)
