@@ -173,13 +173,13 @@
           <!-- Linha 1: tabs + meta -->
           <div class="events-section__row events-section__row--top">
             <nav class="tabs" id="tabsContainer" role="tablist" aria-label="Categorias de eventos">
-              <button type="button" class="tab tab--active" id="tabLogs" role="tab" aria-selected="true">
+              <button type="button" class="tab tab--active" id="tabLogs" data-tab="logs" role="tab" aria-selected="true">
                 Logs <span class="tab__count" id="tabCountLogs">0</span>
               </button>
-              <button type="button" class="tab" id="tabAuth" role="tab" aria-selected="false">
+              <button type="button" class="tab" id="tabAuth" data-tab="auth" role="tab" aria-selected="false">
                 Autenticação <span class="tab__count" id="tabCountAuth">0</span>
               </button>
-              <button type="button" class="tab" id="tabSessions" role="tab" aria-selected="false">
+              <button type="button" class="tab" id="tabSessions" data-tab="sessions" role="tab" aria-selected="false">
                 Sessões <span class="tab__count" id="tabCountSessions">0</span>
               </button>
             </nav>
@@ -203,17 +203,17 @@
             </div>
 
             <div class="severity-pills" id="severityPills">
-              <button type="button" class="pill pill--erro is-active" id="pillErro">
+              <button type="button" class="pill pill--erro is-active" id="pillErro" data-severity="ERRO" aria-pressed="true">
                 <span class="pill__dot"></span>
                 <span class="pill__label">Erros</span>
                 <span class="pill__count" id="pillCountErro">0</span>
               </button>
-              <button type="button" class="pill pill--alerta is-active" id="pillAlerta">
+              <button type="button" class="pill pill--alerta is-active" id="pillAlerta" data-severity="ALERTA" aria-pressed="true">
                 <span class="pill__dot"></span>
                 <span class="pill__label">Alertas</span>
                 <span class="pill__count" id="pillCountAlerta">0</span>
               </button>
-              <button type="button" class="pill pill--info is-active" id="pillInfo">
+              <button type="button" class="pill pill--info is-active" id="pillInfo" data-severity="INFO" aria-pressed="true">
                 <span class="pill__dot"></span>
                 <span class="pill__label">Info</span>
                 <span class="pill__count" id="pillCountInfo">0</span>
@@ -437,7 +437,8 @@
     </button>
   </footer>
 </form>
-
+    </div><!-- /.modal__panel -->
+  </div><!-- /.modal -->
 
   <!-- ======================================================================
        DRAWER: CAPACITY MONITOR
