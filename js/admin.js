@@ -1,11 +1,7 @@
 /**
  * ============================================================================
  *  ADMIN.JS — Painel God Mode (Admin) v2.3
- *  Parte 1/2 — Boot, Estado, DOM, API, e Renderização Principal
- *  ----------------------------------------------------------------------------
- *  Reescrito para ES Modules nativos. Contém a lógica de telemetria, 
- *  MTTR (GM-06), Resolução de Erros (GM-04) e agora integra nativamente
- *  os Módulos de Novo Cliente e Monitor de Clientes (Quotas).
+ *  Arquivo Único Unificado - SRE, Quotas, Modais e Renderização
  * ============================================================================
  */
 
@@ -18,8 +14,7 @@ import {
   THEME_DEFAULT
 } from './config.js';
 
-import { apiPost, apiGet } from './api.js';
-import { requireAuth, validateSessionOnBoot, logout, getUserContext } from './auth.js';
+import { requireAuth, validateSessionOnBoot, getUserContext } from './auth.js';
 import {
   relativeTime,
   formatDate,
@@ -33,7 +28,7 @@ import {
   maskCnpj
 } from './utils.js';
 import { matchKB } from './kb.js';
-import { toast, toastSuccess, toastError, emptyState } from './ui-shared.js';
+import { toast, toastSuccess, toastError } from './ui-shared.js';
 
 // ============================================================================
 // 1. CONFIG LOCAL DO ADMIN
@@ -150,7 +145,7 @@ const dom = {
 };
 
 // ============================================================================
-// 4. API LAYER (Admin-scoped)
+// 4. API LAYER
 // ============================================================================
 async function fetchDashboardData() {
   const token = localStorage.getItem(STORAGE_KEYS.TOKEN) || '';
@@ -273,14 +268,6 @@ export function toggleSeverity(sev) {
   renderHeader();
 }
 
-export function setTheme(theme) {
-  const next = theme === 'dark' ? 'dark' : 'light';
-  if (state.ui.theme === next) return;
-  state.ui.theme = next;
-  applyTheme(next, true);
-  try { localStorage.setItem(STORAGE_KEYS.THEME, next); } catch (_) {}
-}
-
 // ============================================================================
 // 6. SELETORES DERIVADOS & MTTR
 // ============================================================================
@@ -322,7 +309,6 @@ function calcularMTTR(logs) {
       totalMs += (resolvidoEm - criadoEm);
       validCount++;
     } else {
-      // Tenta fallback via histórico se resolvidoEm falhar
       const linhasHist = String(l.historico || '').split('\n');
       const linhaRes = linhasHist.find(x => x.includes('RESOLVIDO'));
       if (linhaRes) {
@@ -398,25 +384,37 @@ function getEventsForActiveTab() {
   return applySearchFilter(applyTimeFilter(logs), 'logs');
 }
 
+function contarSaudeAlertas() {
+  let n = 0;
+  for (const a of state.saudeApps) {
+    const st = String(a.status || '').toUpperCase();
+    if (st === 'CRITICO' || st === 'ALERTA' || st === 'OFFLINE') n++;
+  }
+  return n;
+}
+
 // ============================================================================
 // 7. RENDER LAYER
 // ============================================================================
+function contarErrosAbertosPorCliente() {
+  const map = new Map();
+  let totalErros = 0;
+  for (const l of state.logs) {
+    if (String(l.tipoLog).toUpperCase() === 'ERRO' && String(l.status).toUpperCase() !== 'RESOLVIDO') {
+      const id = String(l.idCliente);
+      map.set(id, (map.get(id) || 0) + 1);
+      totalErros++;
+    }
+  }
+  return { map, totalErros };
+}
+
 function renderSidebar() {
   const ul = dom.clientList;
   if (!ul) return;
   ul.textContent = '';
   
-  // Heatmap de Erros (GM-04)
-  const mapErros = new Map();
-  let totalErros = 0;
-  for (const l of state.logs) {
-    if (String(l.tipoLog).toUpperCase() === 'ERRO' && String(l.status).toUpperCase() !== 'RESOLVIDO') {
-      const id = String(l.idCliente);
-      mapErros.set(id, (mapErros.get(id) || 0) + 1);
-      totalErros++;
-    }
-  }
-
+  const { map: contagensErros, totalErros } = contarErrosAbertosPorCliente();
   const ativoId = state.filtroClienteId;
   ul.appendChild(buildClientItem('', 'Todos os Clientes', totalErros, ativoId === '', 'client-item--all'));
 
@@ -426,7 +424,7 @@ function renderSidebar() {
   }
   for (const c of state.clientes) {
     const id = String(c.idCliente);
-    ul.appendChild(buildClientItem(id, c.nomeFantasia || c.nome || id, mapErros.get(id) || 0, ativoId === id));
+    ul.appendChild(buildClientItem(id, c.nomeFantasia || c.nome || id, contagensErros.get(id) || 0, ativoId === id));
   }
 }
 
@@ -471,7 +469,6 @@ function computeKPIs() {
     };
   }
   
-  // Recalcula se estiver filtrado por cliente
   const logsCli = getLogsFiltradosCliente();
   const authCli = getAuthFiltradosCliente();
   const logs24h = applyTimeFilter(logsCli);
@@ -511,10 +508,8 @@ function renderMain() {
   renderSearchClearVisibility();
   renderEventsList();
   
-  // MTTR [GM-06] se houver um container adaptado
   if (dom.kpiOps.totalLogs && !state.filtroClienteId) {
     const mttr = calcularMTTR(state.logs);
-    // Para simplificar, vou alterar o title do total de logs para abrigar a info técnica do MTTR
     dom.kpiOps.totalLogs.title = `MTTR Global: ${mttr || 'N/A'}`; 
   }
 }
@@ -642,13 +637,36 @@ function renderEventsList() {
         <time class="auth-card__time">${relativeTime(item.timestamp)}</time>`;
       card.onclick = () => openDetailDrawer('auth', item);
     }
+    else if (state.activeTab === 'sessions') {
+      const isOnline = String(item.status).toUpperCase() === 'ATIVA';
+      card.className = 'session-card';
+      card.innerHTML = `
+        <div class="session-card__avatar" style="background:${gradientFromString(item.usuario)}">${initials(item.usuario)}</div>
+        <div class="session-card__body">
+          <div class="session-card__head">
+            <span class="session-card__name">${escapeHtml(item.usuario || '—')}</span>
+            <span class="session-card__app">${escapeHtml(item.aplicativo || '—')}</span>
+            <span class="log-card__client">${escapeHtml(getNomeCliente(item.idCliente))}</span>
+          </div>
+          <div class="session-card__meta">
+            <span>${escapeHtml(item.dispositivo)}</span>
+            <span>· Último ping: ${relativeTime(item.ultimoPing)}</span>
+          </div>
+        </div>
+        <div class="session-card__time">
+          <span class="session-card__duration">Online</span>
+        </div>`;
+      card.onclick = () => openDetailDrawer('session', item);
+    }
     
     frag.appendChild(card);
   });
   list.appendChild(frag);
 }
 
-// Detalhes (Drawer)
+// ============================================================================
+// 8. DETAIL DRAWER + [GM-04] Resolver Log
+// ============================================================================
 function openDetailDrawer(kind, data) {
   state.ui.detailOpen = true;
   state.ui.detailContext = { kind, data };
@@ -661,7 +679,18 @@ function openDetailDrawer(kind, data) {
   if (kind === 'log') {
     const status = String(data.status || 'ABERTO').toUpperCase();
     const isResolvido = status === 'RESOLVIDO';
+    const kbMatch = matchKB(data.mensagemErro);
     
+    let kbHtml = '';
+    if (kbMatch) {
+      kbHtml = `
+        <div class="detail-section" style="margin-top:16px; padding:12px; background:rgba(59,130,246,0.05); border:1px solid #3b82f6; border-radius:8px;">
+          <h3 class="detail-section__title" style="color:#3b82f6; font-size:13px;">📚 Knowledge Base</h3>
+          <p style="font-size:12px; margin-top:4px;"><strong>Padrão:</strong> ${escapeHtml(kbMatch.id)} - ${escapeHtml(kbMatch.titulo)}</p>
+          <p style="font-size:12px; margin-top:4px;"><strong>Solução Sugerida:</strong> ${escapeHtml(kbMatch.solucao)}</p>
+        </div>`;
+    }
+
     body.innerHTML = `
       <div class="detail-meta">
         <div class="detail-meta__key">Status</div>
@@ -677,6 +706,7 @@ function openDetailDrawer(kind, data) {
         <h3 class="detail-section__title">Mensagem</h3>
         <pre class="detail-message">${escapeHtml(data.mensagemErro)}</pre>
       </div>
+      ${kbHtml}
       ${!isResolvido && String(data.tipoLog).toUpperCase() === 'ERRO' ? `
         <button class="btn btn--primary btn--block" id="gm-resolve-btn" style="margin-top:16px;">
           ✓ Marcar como Resolvido
@@ -712,18 +742,68 @@ function openDetailDrawer(kind, data) {
 export function closeDetailDrawer() {
   state.ui.detailOpen = false;
   state.ui.detailContext = null;
-  dom.detailDrawer.classList.remove('drawer--open');
-  setTimeout(() => { dom.detailDrawer.hidden = true; }, 250);
+  if(dom.detailDrawer) {
+    dom.detailDrawer.classList.remove('drawer--open');
+    setTimeout(() => { dom.detailDrawer.hidden = true; }, 250);
+  }
 }
 
-/* ============================================================================
- *  ADMIN.JS — Parte 2/2
- *  Exports, Drawers, Modais (Novo Cliente e Quota) e Bind Events
- * ============================================================================
- */
+// ============================================================================
+// 9. REFRESH E CONEXÃO
+// ============================================================================
+function updateConnectionStatus() {
+  const pill = dom.connectionStatus;
+  if (!pill) return;
+  const textEl = pill.querySelector('.status-pill__label') || pill.querySelector('.status-pill__text');
+  if (state.isLoading) {
+    pill.dataset.state = 'loading';
+    if (textEl) textEl.textContent = 'Sincronizando…';
+  } else if (state.error) {
+    pill.dataset.state = 'error';
+    if (textEl) textEl.textContent = 'Erro de conexão';
+  } else {
+    pill.dataset.state = 'online';
+    if (textEl) textEl.textContent = 'Online';
+  }
+}
+
+function updateRefreshButton() {
+  if (!dom.refreshBtn) return;
+  dom.refreshBtn.disabled = state.isLoading;
+}
 
 // ============================================================================
-// 8. EXPORTS (CSV / PDF) [GM-09]
+// 10. TEMA (Ligh/Dark)
+// ============================================================================
+function detectInitialTheme() {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEYS.THEME);
+    if (stored === 'light' || stored === 'dark') return stored;
+  } catch (_) {}
+  const attr = document.documentElement.getAttribute('data-theme');
+  if (attr === 'light' || attr === 'dark') return attr;
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    return 'dark';
+  }
+  return THEME_DEFAULT || 'light';
+}
+
+function applyTheme(theme, withTransition) {
+  const root = document.documentElement;
+  if (withTransition) {
+    root.classList.add('theme-transitioning');
+    setTimeout(() => root.classList.remove('theme-transitioning'), 500);
+  }
+  root.setAttribute('data-theme', theme);
+  if (dom.themeToggleBtn) {
+    dom.themeToggleBtn.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
+    dom.themeToggleBtn.setAttribute('aria-label', theme === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro');
+    dom.themeToggleBtn.title = theme === 'dark' ? 'Tema escuro ativo' : 'Tema claro ativo';
+  }
+}
+
+// ============================================================================
+// 11. EXPORT CSV & PDF [GM-09]
 // ============================================================================
 const CSV_HEADERS = {
   logs:     ['timestamp', 'tipoLog', 'idCliente', 'cliente', 'aplicativo', 'usuario', 'dispositivo', 'mensagemErro'],
@@ -826,7 +906,7 @@ function flashExportButton(msg, btnElement) {
 }
 
 // ============================================================================
-// 9. CAPACITY MONITOR (Saúde do BD)
+// 12. CAPACITY MONITOR (Saúde do BD)
 // ============================================================================
 function renderCapacityBadge() {
   if (!dom.capacityBadge) return;
@@ -883,16 +963,10 @@ export function openCapacityDrawer() {
               <div class="cap-metric"><div class="cap-metric__label">Linhas</div><div class="cap-metric__value">${formatNumber(a.qtdLinhas || 0)}</div></div>
               <div class="cap-metric"><div class="cap-metric__label">Tamanho</div><div class="cap-metric__value">${(a.tamanhoMB || 0).toFixed(2)} MB</div></div>
             </div>
-            ${a.observacoes ? `<div class="cap-card__note">${escapeHtml(a.observacoes)}</div>` : ''}
           </article>
         `;
       }).join('');
     }
-  }
-
-  if (dom.capacityMeta) {
-    const ultima = apps.reduce((acc, a) => Math.max(acc, new Date(a.ultimaColeta || 0).getTime()), 0);
-    dom.capacityMeta.textContent = ultima ? 'Última coleta: ' + relativeTime(new Date(ultima)) : 'Sem coletas ainda';
   }
 
   dom.capacityDrawer.hidden = false;
@@ -908,7 +982,7 @@ export function closeCapacityDrawer() {
 }
 
 // ============================================================================
-// 10. MONITOR DE CLIENTES V3 (Quotas)
+// 13. MONITOR DE CLIENTES V3 (Quotas)
 // ============================================================================
 export async function openQuotaMonitor() {
   let modal = document.getElementById('capacityMonitorModal');
@@ -926,9 +1000,6 @@ export async function openQuotaMonitor() {
         </div>
         <div id="capMonBody" style="padding:16px 20px;overflow-y:auto;flex:1;color:#000;">
           <p style="color:#6b7280;">Buscando dados de licenciamento...</p>
-        </div>
-        <div style="padding:12px 20px;border-top:1px solid #e5e7eb;background:#f9fafb;display:flex;justify-content:flex-end;gap:8px;">
-          <button type="button" data-close class="btn btn--ghost">Fechar</button>
         </div>
       </div>`;
     document.body.appendChild(modal);
@@ -991,7 +1062,7 @@ export async function openQuotaMonitor() {
 }
 
 // ============================================================================
-// 11. FORMULÁRIO NOVO CLIENTE (Unificado)
+// 14. FORMULÁRIO NOVO CLIENTE
 // ============================================================================
 function openNewClientModal() {
   const modalObj = document.getElementById('newClientModal');
@@ -1051,7 +1122,7 @@ async function handleNewClientSubmit(e) {
   } catch (err) {
     const errorDiv = document.createElement('div');
     errorDiv.className = 'form__banner';
-    errorDiv.dataset.type = 'error';
+    errorDiv.style.cssText = 'margin:12px 20px 0; padding:8px 12px; border-radius:6px; font-size:12px; font-weight:500; background:rgba(220,38,38,0.08); color:#b91c1c; border-left:3px solid #dc2626;';
     errorDiv.textContent = `Falha ao cadastrar: ${err.message}`;
     formObj.insertBefore(errorDiv, formObj.firstChild);
   } finally {
@@ -1061,7 +1132,7 @@ async function handleNewClientSubmit(e) {
 }
 
 // ============================================================================
-// 12. BOOT E BIND EVENTS
+// 15. BIND EVENTS
 // ============================================================================
 function bindEvents() {
   // Topbar
@@ -1111,7 +1182,7 @@ function bindEvents() {
   if (dom.exportPdfBtn) dom.exportPdfBtn.addEventListener('click', exportCurrentTabAsPDF);
   if (dom.capacityBtn)  dom.capacityBtn.addEventListener('click', openCapacityDrawer);
   
-  // Delegação de fechar modais/drawers (Procura por [data-close] ou botões específicos)
+  // Delegação de fechar modais/drawers
   document.addEventListener('click', e => {
     if (e.target.closest('#capacityDrawerCloseBtn') || e.target.closest('#capacityDrawer .drawer__backdrop')) {
       closeCapacityDrawer();
@@ -1132,7 +1203,7 @@ function bindEvents() {
   const formNovoCliente = document.getElementById('formNovoCliente');
   if (formNovoCliente) formNovoCliente.addEventListener('submit', handleNewClientSubmit);
 
-  // Máscaras e comportamentos de formulário
+  // Máscaras de formulário
   const cnpjInput = document.getElementById('ncCnpj');
   if (cnpjInput) {
     cnpjInput.addEventListener('input', (e) => {
@@ -1166,39 +1237,54 @@ function bindEvents() {
 }
 
 // ============================================================================
-// 12.5. TEMA (Light/Dark) - Restaurado
+// 16. AUTO-REFRESH E TICK
 // ============================================================================
-function detectInitialTheme() {
+let autoRefreshTimer = null;
+let localTickTimer = null;
+
+function startAutoRefresh() {
+  if (autoRefreshTimer) return;
+  autoRefreshTimer = setInterval(() => {
+    if (!state.isLoading && document.visibilityState === 'visible') loadData();
+  }, ADMIN_CONFIG.AUTO_REFRESH_MS);
+}
+
+function startLocalTick() {
+  if (localTickTimer) return;
+  localTickTimer = setInterval(() => {
+    if (state.isLoading) return;
+    renderHeader();
+    renderLiveStrip();
+    renderEventsList();
+  }, ADMIN_CONFIG.LOCAL_TICK_MS);
+}
+
+// ============================================================================
+// 17. ORCHESTRATION (Load Data)
+// ============================================================================
+async function loadData() {
+  if (state.isLoading) return;
+  setLoading(true);
+  setError(null);
   try {
-    const stored = localStorage.getItem(STORAGE_KEYS.THEME);
-    if (stored === 'light' || stored === 'dark') return stored;
-  } catch (_) {}
-  const attr = document.documentElement.getAttribute('data-theme');
-  if (attr === 'light' || attr === 'dark') return attr;
-  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-    return 'dark';
-  }
-  return THEME_DEFAULT || 'light';
-}
-
-function applyTheme(theme, withTransition) {
-  const root = document.documentElement;
-  if (withTransition) {
-    root.classList.add('theme-transitioning');
-    setTimeout(() => root.classList.remove('theme-transitioning'), 500);
-  }
-  root.setAttribute('data-theme', theme);
-  if (dom.themeToggleBtn) {
-    dom.themeToggleBtn.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
-    dom.themeToggleBtn.setAttribute('aria-label',
-      theme === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro');
-    dom.themeToggleBtn.title = theme === 'dark' ? 'Tema escuro ativo' : 'Tema claro ativo';
+    const data = await fetchDashboardData();
+    if (!data) return; // forceLogout já redirecionou
+    setData(data);
+    if (state.filtroClienteId && !state.clientes.some(c => String(c.idCliente) === String(state.filtroClienteId))) {
+      state.filtroClienteId = '';
+    }
+    renderSidebar();
+    renderMain();
+  } catch (err) {
+    setError(err);
+    renderMain();
+  } finally {
+    setLoading(false);
   }
 }
-
 
 // ============================================================================
-// BOOT
+// 18. BOOT
 // ============================================================================
 async function init() {
   requireAuth({ role: 'admin' });
@@ -1208,17 +1294,15 @@ async function init() {
   state.user.escopo  = ctx.escopo || '*';
   if (dom.loggedUserDisplay) dom.loggedUserDisplay.textContent = state.user.usuario || 'Admin';
 
-  state.ui.theme = localStorage.getItem(STORAGE_KEYS.THEME) || THEME_DEFAULT;
+  state.ui.theme = detectInitialTheme();
   applyTheme(state.ui.theme, false);
 
   validateSessionOnBoot().catch(() => {});
   bindEvents();
   
   await loadData();
-  
-  setInterval(() => {
-    if (!state.isLoading && document.visibilityState === 'visible') loadData();
-  }, ADMIN_CONFIG.AUTO_REFRESH_MS);
+  startAutoRefresh();
+  startLocalTick();
 
   document.body.classList.add('pronto');
   const tampa = document.getElementById('tampa-carregamento');
@@ -1231,5 +1315,4 @@ if (document.readyState === 'loading') {
   init();
 }
 
-// Expõe globalmente a função do monitor V3 para ser usada de fora se precisar
 window.openQuotaMonitor = openQuotaMonitor;
