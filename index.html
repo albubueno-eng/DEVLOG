@@ -319,6 +319,20 @@
             <span class="form__error" hidden></span>
           </div>
 
+          <!-- Apps Contratados -->
+          <div class="form__field" data-field="apps">
+            <label>Apps contratados <span class="required">*</span></label>
+            <div class="checkbox-group" style="display: flex; gap: 14px; margin-top: 4px; padding: 10px; border: 1px solid var(--border-soft); border-radius: 6px; background: var(--bg-surface);">
+              <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                <input type="checkbox" name="ncApps" value="ponto" checked /> Ponto Digital
+              </label>
+              <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                <input type="checkbox" name="ncApps" value="estoque" /> Estoque
+              </label>
+            </div>
+            <span class="form__error" hidden></span>
+          </div>
+
           <!-- Quota -->
           <div class="form__field" data-field="quotaFuncionarios">
             <label for="ncQuota">
