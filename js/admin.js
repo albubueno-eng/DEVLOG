@@ -1166,6 +1166,38 @@ function bindEvents() {
 }
 
 // ============================================================================
+// 12.5. TEMA (Light/Dark) - Restaurado
+// ============================================================================
+function detectInitialTheme() {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEYS.THEME);
+    if (stored === 'light' || stored === 'dark') return stored;
+  } catch (_) {}
+  const attr = document.documentElement.getAttribute('data-theme');
+  if (attr === 'light' || attr === 'dark') return attr;
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    return 'dark';
+  }
+  return THEME_DEFAULT || 'light';
+}
+
+function applyTheme(theme, withTransition) {
+  const root = document.documentElement;
+  if (withTransition) {
+    root.classList.add('theme-transitioning');
+    setTimeout(() => root.classList.remove('theme-transitioning'), 500);
+  }
+  root.setAttribute('data-theme', theme);
+  if (dom.themeToggleBtn) {
+    dom.themeToggleBtn.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
+    dom.themeToggleBtn.setAttribute('aria-label',
+      theme === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro');
+    dom.themeToggleBtn.title = theme === 'dark' ? 'Tema escuro ativo' : 'Tema claro ativo';
+  }
+}
+
+
+// ============================================================================
 // BOOT
 // ============================================================================
 async function init() {
