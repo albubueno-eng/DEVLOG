@@ -1155,7 +1155,8 @@ function buildErrorState() {
 }
 
 // ============================================================================
-// 8. DETAIL DRAWER + [GM-04] Resolver Log
+// ============================================================================
+// 8. DETAIL DRAWER + [GM-04] Resolver Log (Corrigido)
 // ============================================================================
 function openDetailDrawer(kind, data) {
   state.ui.detailOpen = true;
@@ -1207,16 +1208,27 @@ function openDetailDrawer(kind, data) {
     const resolveBtn = body.querySelector('#gm-resolve-btn');
     if (resolveBtn) {
       resolveBtn.onclick = async () => {
-        const resolucao = prompt('Anotação de resolução (opcional):');
+        const resolucao = prompt('Anotação de resolução (opcional):', '');
         if (resolucao === null) return;
         try {
+          resolveBtn.disabled = true;
           resolveBtn.textContent = 'Resolvendo...';
-          await adminApiPost('updatelogstatus', { idLog: data.idLog, resolucao });
-          toastSuccess('Log marcado como resolvido!');
+          
+          // PAYLOAD CORRIGIDO PARA O BACKEND
+          await adminApiPost('updatelogstatus', { 
+            timestamp: data.timestamp,
+            idCliente: data.idCliente,
+            mensagemErro: data.mensagemErro,
+            novoStatus: 'RESOLVIDO',
+            resolucao: resolucao.trim() 
+          });
+          
           closeDetailDrawer();
-          loadData();
+          await loadData();
+          toastSuccess('Log marcado como resolvido!');
         } catch(e) {
           toastError('Falha ao resolver: ' + e.message);
+          resolveBtn.disabled = false;
           resolveBtn.textContent = '✓ Marcar como Resolvido';
         }
       };
@@ -1550,17 +1562,24 @@ export async function openQuotaMonitor() {
     body.innerHTML = `<div style="background:#fee2e2;color:#991b1b;padding:12px;border-radius:6px;">❌ Falha ao carregar as Quotas: ${escapeHtml(e.message)}</div>`;
   }
 }
+
 // ============================================================================
-// 14. FORMULÁRIO NOVO CLIENTE
+// 14. FORMULÁRIO INTELIGENTE — Novo Cliente (Restaurado e Blindado)
 // ============================================================================
 function openNewClientModal() {
   const modalObj = document.getElementById('newClientModal');
   const formObj = document.getElementById('formNovoCliente');
   if (!modalObj || !formObj) return;
+  
   formObj.reset();
   formObj.querySelectorAll('.is-invalid, .is-valid').forEach(el => el.classList.remove('is-invalid', 'is-valid'));
   const banner = formObj.querySelector('.form__banner');
   if (banner) banner.remove();
+  
+  const logoPreview = document.getElementById('ncLogoPreview');
+  const logoRemoveBtn = document.getElementById('ncLogoRemoveBtn');
+  if (logoPreview) logoPreview.innerHTML = '<span class="logo-uploader__placeholder">Sem logo</span>';
+  if (logoRemoveBtn) logoRemoveBtn.hidden = true;
   
   modalObj.hidden = false;
   document.body.style.overflow = 'hidden';
@@ -1573,52 +1592,274 @@ function closeNewClientModal() {
   document.body.style.overflow = '';
 }
 
-async function handleNewClientSubmit(e) {
-  e.preventDefault();
-  const formObj = e.target;
-  const btnSubmit = formObj.querySelector('button[type="submit"]');
-  const banner = formObj.querySelector('.form__banner');
-  if (banner) banner.remove();
+// RESTAURAÇÃO: O motor completo do formulário isolado em um IIFE.
+(function initFormNovoCliente() {
+  const form = document.getElementById('formNovoCliente');
+  if (!form) return;
 
-  const getVal = id => formObj.querySelector(`#${id}`)?.value.trim() || '';
-  const payload = {
-    idCliente: getVal('ncIdCliente').toLowerCase(),
-    nome: getVal('ncRazaoSocial'),
-    nomeFantasia: getVal('ncNomeFantasia') || getVal('ncRazaoSocial'),
-    cnpj: getVal('ncCnpj').replace(/\D/g, ''),
-    email: getVal('ncEmail'),
-    telefone: getVal('ncTelefone'),
-    plano: getVal('ncPlano'),
-    quotaFuncionarios: Number(getVal('ncQuota')),
-    logoUrl: getVal('ncLogoUrl'),
-    corPrimaria: getVal('ncCorPrimaria') || '#2563eb'
+  const $ = (sel) => form.querySelector(sel);
+  const fields = {
+    idCliente:    $('#ncIdCliente'),
+    razaoSocial:  $('#ncRazaoSocial'),
+    nomeFantasia: $('#ncNomeFantasia'),
+    cnpj:         $('#ncCnpj'),
+    email:        $('#ncEmail'),
+    telefone:     $('#ncTelefone'),
+    plano:        $('#ncPlano'),
+    quota:        $('#ncQuota'),
+    logoUrl:      $('#ncLogoUrl'),
+    corPrim:      $('#ncCorPrimaria'),
+    corPicker:    $('#ncCorPicker'),
   };
+  
+  const submitBtn  = $('#ncSubmitBtn');
+  const btnLabel   = submitBtn?.querySelector('.btn__label') || submitBtn;
+  const btnSpinner = submitBtn?.querySelector('.btn__spinner');
 
-  if (!/^[a-z0-9_-]{2,32}$/.test(payload.idCliente)) {
-    toastError('O ID do Cliente deve conter apenas a-z, 0-9, - ou _');
-    return;
+  function setError(fieldName, msg) {
+    const wrap = form.querySelector(`[data-field="${fieldName}"]`);
+    if (!wrap) return;
+    wrap.classList.add('is-invalid');
+    wrap.classList.remove('is-valid');
+    const errEl = wrap.querySelector('.form__error');
+    if (errEl) { errEl.textContent = msg; errEl.hidden = false; }
   }
 
-  btnSubmit.disabled = true;
-  btnSubmit.innerHTML = 'Cadastrando...';
-
-  try {
-    await adminApiPost('createClient', payload);
-    toastSuccess('Cliente cadastrado com sucesso!');
-    closeNewClientModal();
-    await loadData();
-    setFilter(payload.idCliente);
-  } catch (err) {
-    const errorDiv = document.createElement('div');
-    errorDiv.className = 'form__banner';
-    errorDiv.style.cssText = 'margin:12px 20px 0; padding:8px 12px; border-radius:6px; font-size:12px; font-weight:500; background:rgba(220,38,38,0.08); color:#b91c1c; border-left:3px solid #dc2626;';
-    errorDiv.textContent = `Falha ao cadastrar: ${err.message}`;
-    formObj.insertBefore(errorDiv, formObj.firstChild);
-  } finally {
-    btnSubmit.disabled = false;
-    btnSubmit.innerHTML = 'Cadastrar cliente';
+  function setValid(fieldName) {
+    const wrap = form.querySelector(`[data-field="${fieldName}"]`);
+    if (!wrap) return;
+    wrap.classList.remove('is-invalid');
+    wrap.classList.add('is-valid');
+    const errEl = wrap.querySelector('.form__error');
+    if (errEl) { errEl.textContent = ''; errEl.hidden = true; }
   }
-}
+
+  function clearState(fieldName) {
+    const wrap = form.querySelector(`[data-field="${fieldName}"]`);
+    if (!wrap) return;
+    wrap.classList.remove('is-invalid', 'is-valid');
+    const errEl = wrap.querySelector('.form__error');
+    if (errEl) { errEl.textContent = ''; errEl.hidden = true; }
+  }
+
+  function clearAllErrors() {
+    form.querySelectorAll('.form__field').forEach(f => {
+      f.classList.remove('is-invalid', 'is-valid');
+      const e = f.querySelector('.form__error');
+      if (e) { e.textContent = ''; e.hidden = true; }
+    });
+    const banner = form.querySelector('.form__banner');
+    if (banner) banner.remove();
+  }
+
+  function showBanner(msg, type = 'error') {
+    let banner = form.querySelector('.form__banner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.className = 'form__banner';
+      banner.style.cssText = 'margin:12px 20px 0; padding:8px 12px; border-radius:6px; font-size:12px; font-weight:500;';
+      form.insertBefore(banner, form.firstChild);
+    }
+    if (type === 'error') {
+      banner.style.background = 'rgba(220,38,38,0.08)';
+      banner.style.color = '#b91c1c';
+      banner.style.borderLeft = '3px solid #dc2626';
+    } else {
+      banner.style.background = 'rgba(16,185,129,0.08)';
+      banner.style.color = '#047857';
+      banner.style.borderLeft = '3px solid #10b981';
+    }
+    banner.textContent = msg;
+    banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function validarCnpj(cnpj) {
+    const d = String(cnpj).replace(/\D/g, '');
+    if (d.length !== 14) return false;
+    if (/^(\d)\1{13}$/.test(d)) return false; 
+    let t = d.length - 2, n = d.substring(0, t), v = d.substring(t), s = 0, p = t - 7;
+    for (let i = t; i >= 1; i--) { s += +n.charAt(t - i) * p--; if (p < 2) p = 9; }
+    let r = s % 11 < 2 ? 0 : 11 - s % 11;
+    if (r != +v.charAt(0)) return false;
+    t = t + 1; n = d.substring(0, t); s = 0; p = t - 7;
+    for (let i = t; i >= 1; i--) { s += +n.charAt(t - i) * p--; if (p < 2) p = 9; }
+    r = s % 11 < 2 ? 0 : 11 - s % 11;
+    return r == +v.charAt(1);
+  }
+
+  function validarEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(e).trim()); }
+
+  // Mascaras e Listeners Visuais
+  fields.cnpj?.addEventListener('input', (e) => {
+    e.target.value = maskCnpj(e.target.value);
+  });
+  fields.idCliente?.addEventListener('input', (e) => {
+    e.target.value = e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  });
+  fields.corPicker?.addEventListener('input', (e) => {
+    fields.corPrim.value = e.target.value;
+    clearState('corPrimaria');
+  });
+  fields.corPrim?.addEventListener('input', (e) => {
+    const v = e.target.value.trim();
+    if (/^#[0-9a-fA-F]{6}$/.test(v)) fields.corPicker.value = v.toLowerCase();
+  });
+
+  // Validador mestre chamado no blur e no submit
+  function validateField(name) {
+    const v = (fields[name === 'corPrim' ? 'corPrim' : (name === 'quota' ? 'quota' : name)]?.value || '').trim();
+    switch (name) {
+      case 'idCliente':
+        if (!v) return setError('idCliente', 'Obrigatório.');
+        if (!/^[a-z0-9_-]{2,32}$/.test(v)) return setError('idCliente', 'Use 2-32 caracteres: a-z, 0-9, _ ou -.');
+        if (state.clientes.some(c => String(c.idCliente).toLowerCase() === v)) return setError('idCliente', 'ID já em uso.');
+        return setValid('idCliente');
+      case 'razaoSocial':
+        if (!v) return setError('razaoSocial', 'Obrigatório.');
+        if (v.length < 3) return setError('razaoSocial', 'Mínimo 3 caracteres.');
+        return setValid('razaoSocial');
+      case 'cnpj':
+        if (!v) return setError('cnpj', 'Obrigatório.');
+        if (v.replace(/\D/g, '').length !== 14) return setError('cnpj', 'CNPJ incompleto.');
+        if (!validarCnpj(v)) return setError('cnpj', 'CNPJ inválido.');
+        return setValid('cnpj');
+      case 'email':
+        if (!v) { clearState('email'); return; }
+        if (!validarEmail(v)) return setError('email', 'Email inválido.');
+        return setValid('email');
+      case 'quota':
+        const n = Number(v);
+        if (!v) return setError('quotaFuncionarios', 'Obrigatório.');
+        if (!Number.isFinite(n) || n < 1 || n > 500) return setError('quotaFuncionarios', 'Entre 1 e 500.');
+        return setValid('quotaFuncionarios');
+      case 'corPrim':
+        if (!v) { clearState('corPrimaria'); return; }
+        if (!/^#[0-9a-fA-F]{6}$/.test(v)) return setError('corPrimaria', 'Use formato #RRGGBB.');
+        return setValid('corPrimaria');
+    }
+  }
+
+  fields.idCliente?.addEventListener('blur',   () => validateField('idCliente'));
+  fields.razaoSocial?.addEventListener('blur', () => validateField('razaoSocial'));
+  fields.cnpj?.addEventListener('blur',        () => validateField('cnpj'));
+  fields.email?.addEventListener('blur',       () => validateField('email'));
+  fields.quota?.addEventListener('input',      () => validateField('quota'));
+  fields.corPrim?.addEventListener('blur',     () => validateField('corPrim'));
+
+  Object.values(fields).forEach(el => {
+    el?.addEventListener('input', () => {
+      const wrap = el.closest('.form__field');
+      if (wrap?.classList.contains('is-invalid')) {
+        wrap.classList.remove('is-invalid');
+        const e = wrap.querySelector('.form__error');
+        if (e) { e.textContent = ''; e.hidden = true; }
+      }
+    });
+  });
+
+  // RESTAURAÇÃO: Botão de Upload de Logo abrindo arquivos do aparelho
+  const logoFile      = document.getElementById('ncLogoFile');
+  const logoUploadBtn = document.getElementById('ncLogoUploadBtn');
+  const logoRemoveBtn = document.getElementById('ncLogoRemoveBtn');
+  const logoPreview   = document.getElementById('ncLogoPreview');
+  const MAX_LOGO_KB   = 500;
+
+  if (logoUploadBtn && logoFile) {
+    logoUploadBtn.addEventListener('click', () => logoFile.click());
+  }
+
+  if (logoFile) {
+    logoFile.addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (file.size > MAX_LOGO_KB * 1024) {
+        setError('logo', `Máximo ${MAX_LOGO_KB} KB.`);
+        logoFile.value = '';
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const dataUrl = ev.target.result;
+        if (logoPreview) logoPreview.innerHTML = `<img src="${dataUrl}" alt="logo" style="width:100%;height:100%;object-fit:contain;"/>`;
+        if (logoRemoveBtn) logoRemoveBtn.hidden = false;
+        fields.logoUrl.value = dataUrl;
+        setValid('logo');
+      };
+      reader.onerror = () => setError('logo', 'Falha na leitura.');
+      reader.readAsDataURL(file);
+    });
+  }
+
+  if (logoRemoveBtn) {
+    logoRemoveBtn.addEventListener('click', () => {
+      fields.logoUrl.value = '';
+      if (logoFile) logoFile.value = '';
+      if (logoPreview) logoPreview.innerHTML = '<span class="logo-uploader__placeholder">Sem logo</span>';
+      logoRemoveBtn.hidden = true;
+      clearState('logo');
+    });
+  }
+
+  fields.logoUrl?.addEventListener('input', (e) => {
+    const v = e.target.value.trim();
+    if (!v) {
+      if (logoPreview) logoPreview.innerHTML = '<span class="logo-uploader__placeholder">Sem logo</span>';
+      if (logoRemoveBtn) logoRemoveBtn.hidden = true;
+      return;
+    }
+    if (/^https:\/\//.test(v) || /^data:image\//.test(v)) {
+      if (logoPreview) logoPreview.innerHTML = `<img src="${v}" alt="logo" style="width:100%;height:100%;object-fit:contain;"/>`;
+      if (logoRemoveBtn) logoRemoveBtn.hidden = false;
+    }
+  });
+
+  // RESTAURAÇÃO: SUBMIT PROTEGIDO COM A API NATIVA E AVALIAÇÃO DE ERROS
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    clearAllErrors();
+
+    // Força a validação visual de todos os campos antes de continuar
+    ['idCliente', 'razaoSocial', 'cnpj', 'email', 'quota', 'corPrim'].forEach(validateField);
+
+    const invalidFields = form.querySelectorAll('.form__field.is-invalid');
+    if (invalidFields.length > 0) {
+      showBanner('Corrija os campos destacados.', 'error');
+      return; // Trava aqui se houver erros visíveis (Borda Vermelha)
+    }
+
+    const payload = {
+      idCliente:         fields.idCliente.value.trim().toLowerCase(),
+      nome:              fields.razaoSocial.value.trim(),
+      nomeFantasia:      fields.nomeFantasia.value.trim() || fields.razaoSocial.value.trim(),
+      cnpj:              fields.cnpj.value.replace(/\D/g, ''),
+      email:             fields.email.value.trim(),
+      telefone:          fields.telefone.value.trim(),
+      plano:             fields.plano.value,
+      quotaFuncionarios: Number(fields.quota.value),
+      logoUrl:           fields.logoUrl.value.trim(),
+      corPrimaria:       fields.corPrim.value.trim() || '#2563eb',
+      ativo:             true
+    };
+
+    submitBtn.disabled = true;
+    if (btnLabel) btnLabel.textContent = 'Cadastrando...';
+    if (btnSpinner) btnSpinner.hidden = false;
+
+    try {
+      await adminApiPost('createClient', payload);
+      toastSuccess('Cliente cadastrado com sucesso!');
+      closeNewClientModal();
+      await loadData();
+      setFilter(payload.idCliente);
+    } catch (err) {
+      showBanner(`Falha ao cadastrar: ${err.message}`, 'error');
+    } finally {
+      submitBtn.disabled = false;
+      if (btnLabel) btnLabel.textContent = 'Cadastrar cliente';
+      if (btnSpinner) btnSpinner.hidden = true;
+    }
+  });
+})();
 
 // ============================================================================
 // 15. BIND EVENTS
@@ -1671,7 +1912,7 @@ function bindEvents() {
   if (dom.exportPdfBtn) dom.exportPdfBtn.addEventListener('click', exportCurrentTabAsPDF);
   if (dom.capacityBtn)  dom.capacityBtn.addEventListener('click', openCapacityDrawer);
   
-  // Delegação de fechar modais/drawers (Procura por [data-close] ou botões específicos)
+  // Delegação de cliques global - fecha e abre modais corretamente
   document.addEventListener('click', e => {
     if (e.target.closest('#capacityDrawerCloseBtn') || e.target.closest('#capacityDrawer .drawer__backdrop')) {
       closeCapacityDrawer();
@@ -1679,26 +1920,15 @@ function bindEvents() {
     if (e.target.closest('#detailDrawerCloseBtn') || e.target.closest('#detailDrawer .drawer__backdrop')) {
       closeDetailDrawer();
     }
-   if (e.target.closest('#newClientCloseBtn') || e.target.closest('#newClientModal .modal__backdrop') || e.target.closest('#newClientModal [data-close]')) {
+    // CORREÇÃO: Removemos a busca por .btn--ghost aqui para que não bloqueie o botão de UPLOAD FOTO
+    if (e.target.closest('#newClientCloseBtn') || e.target.closest('#newClientModal .modal__backdrop') || e.target.closest('#newClientModal [data-close]')) {
       closeNewClientModal();
     }
-    // Abre modal de cliente se clicar no botão +
+    // Abre modal de cliente
     if (e.target.closest('#newClientBtn') || e.target.closest('#fabNovoCliente')) {
       openNewClientModal();
     }
   });
-
-  // Intercepta submit do form de novo cliente
-  const formNovoCliente = document.getElementById('formNovoCliente');
-  if (formNovoCliente) formNovoCliente.addEventListener('submit', handleNewClientSubmit);
-
-  // Máscaras e comportamentos de formulário
-  const cnpjInput = document.getElementById('ncCnpj');
-  if (cnpjInput) {
-    cnpjInput.addEventListener('input', (e) => {
-      e.target.value = maskCnpj(e.target.value);
-    });
-  }
 
   // Atalhos Globais
   document.addEventListener('keydown', (ev) => {
