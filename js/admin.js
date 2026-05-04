@@ -42,8 +42,7 @@ import {
   slugify
 } from './utils.js';
 import { matchKB } from './kb.js';
-import { toast } from './ui-shared.js';
-
+import { toast, toastSuccess, toastError } from './ui-shared.js';
 // ============================================================================
 // 1. CONFIG LOCAL DO ADMIN
 // ============================================================================
