@@ -1704,7 +1704,6 @@ function closeNewClientModal() {
     if (/^#[0-9a-fA-F]{6}$/.test(v)) fields.corPicker.value = v.toLowerCase();
   });
 
-  // Validador mestre chamado no blur e no submit
   function validateField(name) {
     const v = (fields[name === 'corPrim' ? 'corPrim' : (name === 'quota' ? 'quota' : name)]?.value || '').trim();
     switch (name) {
@@ -1756,7 +1755,6 @@ function closeNewClientModal() {
     });
   });
 
-  // RESTAURAÇÃO: Botão de Upload de Logo abrindo arquivos do aparelho
   const logoFile      = document.getElementById('ncLogoFile');
   const logoUploadBtn = document.getElementById('ncLogoUploadBtn');
   const logoRemoveBtn = document.getElementById('ncLogoRemoveBtn');
@@ -1867,6 +1865,7 @@ function closeNewClientModal() {
       if (btnSpinner) btnSpinner.hidden = true;
     }
   });
+})(); // <--- ESSA É A CHAVE ABENÇOADA QUE FALTAVA!
 
 // ============================================================================
 // 15. BIND EVENTS
