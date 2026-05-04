@@ -1679,7 +1679,7 @@ function bindEvents() {
     if (e.target.closest('#detailDrawerCloseBtn') || e.target.closest('#detailDrawer .drawer__backdrop')) {
       closeDetailDrawer();
     }
-    if (e.target.closest('#newClientCloseBtn') || e.target.closest('#newClientModal .modal__backdrop') || e.target.closest('#newClientModal .btn--ghost')) {
+   if (e.target.closest('#newClientCloseBtn') || e.target.closest('#newClientModal .modal__backdrop') || e.target.closest('#newClientModal [data-close]')) {
       closeNewClientModal();
     }
     // Abre modal de cliente se clicar no botão +
