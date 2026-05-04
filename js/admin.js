@@ -1,7 +1,20 @@
 /**
  * ============================================================================
- *  ADMIN.JS — Painel God Mode (Admin) v2.3
- *  Arquivo Único Unificado - SRE, Quotas, Modais e Renderização
+ *  ADMIN.JS — Painel God Mode (Admin) v2.2
+ *  Restauração fiel do dev.js v2.1 + arquitetura ES Modules da Onda 2
+ *  ----------------------------------------------------------------------------
+ *  Features restauradas do dev.js original:
+ *   [GM-03] Auth Guard via auth.js (requireAuth role=admin)
+ *   [GM-04] Status ABERTO/RESOLVIDO + botão "Marcar Resolvido" + badges
+ *   [GM-06] MTTR (Mean Time To Resolution) com parser de histórico
+ *   [GM-07] (backend) Telegram alerts — ver Code.gs Parte B
+ *   [GM-08] Filtro temporal in-memory (24h / 7d / 30d / Tudo)
+ *   [GM-09] Export PDF via jsPDF + AutoTable
+ *   [GM-10] (futuro) RBAC morphing — este arquivo é só admin
+ *   Heatmap de erros críticos abertos na sidebar (vermelho/zerado)
+ *   Auto-refresh visibility-aware + local tick separados
+ *   Atalhos de teclado: r / 1 / 2 / 3 / / / t / c / Esc
+ *   Validação anti-duplicata no modal de cliente + auto-sanitize do ID
  * ============================================================================
  */
 
@@ -14,7 +27,9 @@ import {
   THEME_DEFAULT
 } from './config.js';
 
-import { requireAuth, validateSessionOnBoot, getUserContext } from './auth.js';
+
+import { apiPost, apiGet } from './api.js';
+import { requireAuth, validateSessionOnBoot, logout, getUserContext } from './auth.js';
 import {
   relativeTime,
   formatDate,
@@ -24,11 +39,10 @@ import {
   gradientFromString,
   debounce,
   formatNumber,
-  slugify,
-  maskCnpj
+  slugify
 } from './utils.js';
 import { matchKB } from './kb.js';
-import { toast, toastSuccess, toastError } from './ui-shared.js';
+import { toast } from './ui-shared.js';
 
 // ============================================================================
 // 1. CONFIG LOCAL DO ADMIN
@@ -42,7 +56,7 @@ const ADMIN_CONFIG = {
 };
 
 // ============================================================================
-// 2. STATE GLOBAL
+// 2. STATE
 // ============================================================================
 const state = {
   clientes: [],
@@ -60,7 +74,7 @@ const state = {
 
   ui: {
     search: '',
-    timeRange: '24h',                       
+    timeRange: 'all',                       // [GM-08]
     severity: { ERRO: true, ALERTA: true, INFO: true },
     theme: 'light',
     capacityOpen: false,
@@ -76,14 +90,68 @@ const state = {
 };
 
 // ============================================================================
-// 3. SELETORES DOM
+// 3. KNOWLEDGE BASE — 40 padrões locais (espelho do backend)
+// ============================================================================
+const KB_PATTERNS = [
+  { id:'sh-001', categoria:'sheets', regex:/Service invoked too many times/i,         titulo:'Quota de execuções esgotada',       severidade:'ERRO',   solucao:'Implementar batch + cache; reduzir frequência de gravações.' },
+  { id:'sh-002', categoria:'sheets', regex:/Exceeded maximum execution time/i,        titulo:'Timeout 6 min do Apps Script',      severidade:'ERRO',   solucao:'Quebrar em chunks via PropertiesService + trigger.' },
+  { id:'sh-003', categoria:'sheets', regex:/limit.*cells|10.?000.?000/i,              titulo:'Limite de 10M células atingido',    severidade:'ERRO',   solucao:'Migrar dados frios; arquivar abas antigas.' },
+  { id:'sh-004', categoria:'sheets', regex:/Range not found|aba não encontrada/i,     titulo:'Range/aba não encontrada',          severidade:'ALERTA',solucao:'Verificar nomes via getSheetByName antes de getRange.' },
+  { id:'sh-005', categoria:'sheets', regex:/getValue.*null|getValues.*null/i,         titulo:'Leitura de célula vazia',           severidade:'INFO',  solucao:'Validar com getLastRow/Column antes de ler.' },
+  { id:'sh-006', categoria:'sheets', regex:/Lock timeout|waitLock/i,                  titulo:'LockService travado',               severidade:'ALERTA',solucao:'Reduzir tempo crítico; usar tryLock(0) com retry.' },
+  { id:'sh-007', categoria:'sheets', regex:/too large|payload exceeded/i,             titulo:'Payload de escrita > 50MB',         severidade:'ERRO',   solucao:'Quebrar setValues em blocos de 5k linhas.' },
+  { id:'sh-008', categoria:'sheets', regex:/do not have permission|access denied/i,   titulo:'Permissão de planilha revogada',    severidade:'ERRO',   solucao:'Reautorizar conta de serviço; validar OAuth scopes.' },
+  { id:'sh-009', categoria:'sheets', regex:/Document.*deleted|file not found/i,       titulo:'Documento excluído',                severidade:'ERRO',   solucao:'Restaurar do Drive Trash em até 30d.' },
+  { id:'sh-010', categoria:'sheets', regex:/Authorization is required/i,              titulo:'Token expirado',                    severidade:'ERRO',   solucao:'Forçar reLogin; renovar refresh_token.' },
+  { id:'nw-001', categoria:'rede',   regex:/DNS|getaddrinfo|ENOTFOUND/i,              titulo:'Falha de DNS',                      severidade:'ERRO',   solucao:'Verificar conectividade e DNS.' },
+  { id:'nw-002', categoria:'rede',   regex:/ECONNREFUSED|connection refused/i,        titulo:'Conexão recusada',                  severidade:'ERRO',   solucao:'Endpoint offline; ativar fallback.' },
+  { id:'nw-003', categoria:'rede',   regex:/ETIMEDOUT|timeout|timed out/i,            titulo:'Timeout de fetch',                  severidade:'ALERTA',solucao:'Aumentar timeout ou usar circuit breaker.' },
+  { id:'nw-004', categoria:'rede',   regex:/CORS|Access-Control-Allow/i,              titulo:'CORS bloqueado',                    severidade:'ERRO',   solucao:'Configurar Access-Control-Allow-Origin no servidor.' },
+  { id:'nw-005', categoria:'rede',   regex:/SSL|certificate|TLS/i,                    titulo:'Certificado SSL inválido',          severidade:'ERRO',   solucao:'Renovar TLS; conferir cadeia.' },
+  { id:'nw-006', categoria:'rede',   regex:/429|Too Many Requests|rate limit/i,       titulo:'Rate limit',                        severidade:'ALERTA',solucao:'Backoff exponencial + jitter.' },
+  { id:'nw-007', categoria:'rede',   regex:/502|503|504|gateway/i,                    titulo:'Gateway/upstream',                  severidade:'ALERTA',solucao:'Retry com circuit breaker.' },
+  { id:'nw-008', categoria:'rede',   regex:/NetworkError|Failed to fetch/i,           titulo:'Falha de rede no client',           severidade:'ALERTA',solucao:'Detectar offline + retry on visibility.' },
+  { id:'au-001', categoria:'auth',   regex:/invalid_grant|token revoked/i,            titulo:'Token revogado',                    severidade:'ERRO',   solucao:'Forçar reautenticação OAuth.' },
+  { id:'au-002', categoria:'auth',   regex:/401|Unauthorized/i,                       titulo:'Sem credenciais válidas',           severidade:'ERRO',   solucao:'Renovar API key/token.' },
+  { id:'au-003', categoria:'auth',   regex:/403|Forbidden/i,                          titulo:'Permissão negada',                  severidade:'ERRO',   solucao:'Verificar roles do usuário.' },
+  { id:'au-004', categoria:'auth',   regex:/session.*expired|sess(a|ã)o.*expirad/i,   titulo:'Sessão expirada',                   severidade:'INFO',  solucao:'Comportamento esperado após 90s sem heartbeat.' },
+  { id:'au-005', categoria:'auth',   regex:/wrong password|senha incorreta/i,         titulo:'Login falho',                       severidade:'ALERTA',solucao:'Bloquear após 5 tentativas em 10min.' },
+  { id:'au-006', categoria:'auth',   regex:/2FA|two-factor|TOTP/i,                    titulo:'2FA pendente',                      severidade:'INFO',  solucao:'Aguardar código TOTP do usuário.' },
+  { id:'dt-001', categoria:'dados',  regex:/undefined is not|Cannot read prop/i,      titulo:'Acesso a undefined',                severidade:'ERRO',   solucao:'Optional chaining + default values.' },
+  { id:'dt-002', categoria:'dados',  regex:/NaN|Invalid Number/i,                     titulo:'Conversão numérica falha',          severidade:'ALERTA',solucao:'Number(x) com isFinite() check.' },
+  { id:'dt-003', categoria:'dados',  regex:/Invalid Date/i,                           titulo:'Data inválida',                     severidade:'ALERTA',solucao:'ISO-8601 obrigatório; validar antes de new Date().' },
+  { id:'dt-004', categoria:'dados',  regex:/JSON.parse|Unexpected token/i,            titulo:'JSON malformado',                   severidade:'ERRO',   solucao:'try/catch + logar primeiros 200 chars.' },
+  { id:'dt-005', categoria:'dados',  regex:/duplicate.*key|UNIQUE constraint/i,       titulo:'Chave duplicada',                   severidade:'ALERTA',solucao:'Upsert em vez de insert.' },
+  { id:'dt-006', categoria:'dados',  regex:/foreign key|FK constraint/i,              titulo:'FK órfã',                           severidade:'ALERTA',solucao:'Cascata ou validação prévia.' },
+  { id:'dt-007', categoria:'dados',  regex:/string.*too long|too long for type/i,     titulo:'String estourou limite',            severidade:'INFO',  solucao:'Truncar antes de gravar (slice).' },
+  { id:'dt-008', categoria:'dados',  regex:/required.*missing|campo obrigat/i,        titulo:'Campo obrigatório ausente',         severidade:'ALERTA',solucao:'Validar payload no client + server.' },
+  { id:'rt-001', categoria:'device', regex:/out of memory|allocation failed|OOM/i,    titulo:'Out Of Memory',                     severidade:'ERRO',   solucao:'Streamar dados; paginar; liberar refs.' },
+  { id:'rt-002', categoria:'device', regex:/storage.*full|QuotaExceededError/i,       titulo:'localStorage cheio',                severidade:'ALERTA',solucao:'Purgar caches antigos; usar IndexedDB.' },
+  { id:'rt-003', categoria:'device', regex:/IndexedDB|IDB.*error/i,                   titulo:'IndexedDB falhou',                  severidade:'ALERTA',solucao:'Fallback para memória; alertar usuário.' },
+  { id:'rt-004', categoria:'device', regex:/ServiceWorker|sw\.js/i,                   titulo:'Service Worker erro',               severidade:'INFO',  solucao:'Limpar cache do SW; reinstalar.' },
+  { id:'rt-005', categoria:'device', regex:/GPU.*lost|WebGL context/i,                titulo:'Contexto GPU perdido',              severidade:'ALERTA',solucao:'Reinicializar canvas; degradar para 2D.' },
+  { id:'rt-006', categoria:'device', regex:/battery|low power/i,                      titulo:'Modo baixa energia',                severidade:'INFO',  solucao:'Reduzir polling; pausar animações.' },
+  { id:'rt-007', categoria:'device', regex:/permission.*camera|microphone|geo/i,      titulo:'Permissão de mídia negada',         severidade:'ALERTA',solucao:'Solicitar via gesto do usuário; explicar uso.' },
+  { id:'rt-008', categoria:'device', regex:/Maximum call stack|stack overflow/i,      titulo:'Stack overflow',                    severidade:'ERRO',   solucao:'Trocar recursão por iteração; checar caso-base.' }
+];
+
+function findPatternMatch(text) {
+  if (!text) return null;
+  const s = String(text);
+  for (const p of KB_PATTERNS) {
+    if (p.regex.test(s)) return p;
+  }
+  return null;
+}
+
+// ============================================================================
+// 4. DOM REFS — IDs adaptados ao index.html v2.2 (kpi-grid + kpi-grid--ops)
 // ============================================================================
 const dom = {
   // Topbar Auth
   loggedUserDisplay: document.getElementById('userMenu'),
   logoutBtn:         document.getElementById('logoutBtn'),
 
-  // Layout & Sidebar
   clientList:       document.getElementById('clientList'),
   logsList:         document.getElementById('eventsList'),
   logsMeta:         document.getElementById('eventsMeta'),
@@ -104,13 +172,15 @@ const dom = {
     sessions: document.getElementById('tabCountSessions')
   },
 
-  // KPIs
+  // KPIs principais (seção kpi-grid)
   kpiMain: {
     clientes:  document.getElementById('kpiClientes'),
     online:    document.getElementById('kpiOnline'),
     erros24h:  document.getElementById('kpiErros24h'),
     auth24h:   document.getElementById('kpiAuth24h')
   },
+
+  // KPIs operacionais (seção kpi-grid--ops)
   kpiOps: {
     taxaErro:        document.getElementById('kpiTaxaErro'),
     loginsFalhos:    document.getElementById('kpiLoginsFalhos'),
@@ -130,22 +200,55 @@ const dom = {
   themeToggleBtn:   document.getElementById('themeToggleBtn'),
   timeFilterSelect: document.getElementById('timeRangeSelect'),
 
-  // Drawers e Modais principais
+  // Capacity drawer
   capacityBtn:            document.getElementById('capacityBtn'),
   capacityBadge:          document.getElementById('capacityBadge'),
   capacityDrawer:         document.getElementById('capacityDrawer'),
+  capacityDrawerSubtitle: null, // não existe no HTML atual — protegido em todos os usos
   capacitySummary:        document.getElementById('capacityDrawerSummary'),
   capacityList:           document.getElementById('capacityDrawerBody'),
   capacityMeta:           document.getElementById('capacityDrawerMeta'),
 
+  // Detail drawer (estrutura simplificada — sem campos pré-prontos no HTML)
   detailDrawer:        document.getElementById('detailDrawer'),
   detailDrawerTitle:   document.getElementById('detailDrawerTitle'),
+  detailDrawerSubtitle: null,
   detailDrawerBody:    document.getElementById('detailDrawerBody'),
+  detailMeta:          null,
+  detailMessage:       null,
+  detailKbWrap:        null,
+  detailKbId:          null,
+  detailKbCat:         null,
+  detailKbSev:         null,
+  detailKbTitle:       null,
+  detailKbSolucao:     null,
   detailCopyBtn:       document.getElementById('detailDrawerCopyBtn'),
+  detailMetaFoot:      null
+};
+
+// Compat com código que ainda usa dom.kpi.* (algumas partes legacy do admin.js)
+// Aponta pros novos KPIs principais (manter consistência sem quebrar nada).
+dom.kpi = {
+  total:   dom.kpiOps.totalLogs,
+  erros:   dom.kpiMain.erros24h,
+  alertas: null,
+  infos:   null,
+  mttr:    null
+};
+
+const modal = {
+  root:      document.getElementById('newClientModal'),
+  form:      document.getElementById('newClientForm'),
+  fldId:     document.getElementById('ncIdCliente'),
+  fldName:   document.getElementById('ncNome'),
+  fldActive: null, // não existe no HTML — wizard usa 'ativo' default true
+  saveBtn:   document.getElementById('newClientSubmitBtn'),
+  formError: document.getElementById('newClientFormError'),
+  openBtn:   document.getElementById('newClientBtn')
 };
 
 // ============================================================================
-// 4. API LAYER
+// 5. API LAYER (admin-scoped)
 // ============================================================================
 async function fetchDashboardData() {
   const token = localStorage.getItem(STORAGE_KEYS.TOKEN) || '';
@@ -162,12 +265,19 @@ async function fetchDashboardData() {
   let resp;
   try {
     resp = await fetch(url, {
-      method: 'GET', mode: 'cors', credentials: 'omit', cache: 'no-store', signal: ctrl.signal
+      method: 'GET',
+      mode: 'cors',
+      credentials: 'omit',
+      cache: 'no-store',
+      redirect: 'follow',
+      signal: ctrl.signal
     });
   } catch (err) {
     clearTimeout(timeoutId);
-    if (err.name === 'AbortError') throw new Error(`Timeout (${ADMIN_CONFIG.FETCH_TIMEOUT_MS / 1000}s).`);
-    throw new Error('Falha de rede ou CORS.');
+    if (err.name === 'AbortError') {
+      throw new Error(`Tempo de resposta excedido (${ADMIN_CONFIG.FETCH_TIMEOUT_MS / 1000}s).`);
+    }
+    throw new Error('Falha de rede ou CORS. Verifique a implantação.');
   }
   clearTimeout(timeoutId);
 
@@ -176,47 +286,60 @@ async function fetchDashboardData() {
   const raw = await resp.text();
   let json;
   try { json = JSON.parse(raw); }
-  catch { throw new Error('Resposta inválida do servidor.'); }
+  catch {
+    if (raw.includes('<!DOCTYPE') || raw.includes('accounts.google.com')) {
+      throw new Error('Apps Script exigiu login. Reimplante como "Qualquer pessoa".');
+    }
+    throw new Error('Resposta inválida do servidor.');
+  }
 
   if (json.error === 'Sessão inválida ou expirada') {
-    forceLogout(); return;
+    forceLogout();
+    return;
   }
-  if (!json.ok) throw new Error(json.error || 'Erro do servidor');
+
+  if (!json.ok) throw new Error(json.error || 'Resposta inválida do servidor');
   return json.data;
 }
 
 async function adminApiPost(action, payload) {
   const token = localStorage.getItem(STORAGE_KEYS.TOKEN) || '';
   const resp = await fetch(SCRIPT_URL, {
-    method: 'POST', mode: 'cors', credentials: 'omit', cache: 'no-store',
+    method: 'POST',
+    mode: 'cors',
+    credentials: 'omit',
+    cache: 'no-store',
+    redirect: 'follow',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify({ apiKey: API_KEY, token, action, ...payload })
   });
   const raw = await resp.text();
   let json;
   try { json = JSON.parse(raw); }
-  catch { throw new Error('Resposta inválida'); }
+  catch { throw new Error('Resposta inválida do servidor'); }
 
-  if (json.error === 'Sessão inválida ou expirada') { forceLogout(); return; }
+  if (json.error === 'Sessão inválida ou expirada') {
+    forceLogout();
+    return;
+  }
   if (!json.ok) throw new Error(json.error || 'Falha na operação');
   return json.data;
 }
 
 function forceLogout() {
-  Object.values(STORAGE_KEYS).forEach(k => { try { localStorage.removeItem(k); } catch (_) {} });
+  Object.values(STORAGE_KEYS).forEach(k => {
+    try { localStorage.removeItem(k); } catch (_) {}
+  });
   window.location.replace(ROUTES.LOGIN || './login.html');
 }
 
 // ============================================================================
-// 5. STATE MUTATIONS
+// 6. STATE MUTATIONS
 // ============================================================================
 function setLoading(isLoading) {
   state.isLoading = isLoading;
   updateConnectionStatus();
-  if (dom.refreshBtn) {
-    dom.refreshBtn.disabled = isLoading;
-    dom.refreshBtn.classList.toggle('is-loading', isLoading);
-  }
+  updateRefreshButton();
 }
 
 function setError(error) {
@@ -268,8 +391,21 @@ export function toggleSeverity(sev) {
   renderHeader();
 }
 
+function setTheme(theme) {
+  const next = theme === 'dark' ? 'dark' : 'light';
+  if (state.ui.theme === next) return;
+  state.ui.theme = next;
+  applyTheme(next, true);
+  try { localStorage.setItem(STORAGE_KEYS.THEME, next); } catch (_) {}
+}
+
+function setCapacityOpen(open) {
+  state.ui.capacityOpen = !!open;
+  renderCapacityDrawer();
+}
+
 // ============================================================================
-// 6. SELETORES DERIVADOS & MTTR
+// 7. SELETORES DERIVADOS
 // ============================================================================
 function getLogsFiltradosCliente() {
   if (!state.filtroClienteId) return state.logs;
@@ -286,13 +422,18 @@ function getSessoesFiltradasCliente() {
   return state.sessoesAtivas.filter(s => String(s.idCliente) === String(state.filtroClienteId));
 }
 
-function getNomeCliente(id) {
-  if (!id) return 'Todos os Clientes';
-  const c = state.clientes.find(c => String(c.idCliente) === String(id));
-  return c ? c.nomeCliente : id;
+function calcularKPIsLogs(logs) {
+  const r = { total: logs.length, erros: 0, alertas: 0, infos: 0 };
+  for (const l of logs) {
+    const t = String(l.tipoLog || '').toUpperCase();
+    if (t === 'ERRO')        r.erros++;
+    else if (t === 'ALERTA') r.alertas++;
+    else if (t === 'INFO')   r.infos++;
+  }
+  return r;
 }
 
-// MTTR [GM-06]
+// [GM-06] MTTR — Mean Time To Resolution
 function calcularMTTR(logs) {
   const resolvidos = logs.filter(l => String(l.status).toUpperCase() === 'RESOLVIDO');
   if (!resolvidos.length) return null;
@@ -304,26 +445,22 @@ function calcularMTTR(logs) {
     const criadoEm = new Date(l.timestamp).getTime();
     if (isNaN(criadoEm)) continue;
 
-    const resolvidoEm = new Date(l.resolvidoEm).getTime();
-    if (!isNaN(resolvidoEm) && resolvidoEm >= criadoEm) {
-      totalMs += (resolvidoEm - criadoEm);
-      validCount++;
-    } else {
-      const linhasHist = String(l.historico || '').split('\n');
-      const linhaRes = linhasHist.find(x => x.includes('RESOLVIDO'));
-      if (linhaRes) {
-        const match = linhaRes.match(/\[(.*?)\]/);
-        if (match && match[1]) {
-          const partes = match[1].replace(',', '').split(' ');
-          if (partes.length >= 2) {
-            const [d, m, y] = partes[0].split('/');
-            const [hora, min, sec] = partes[1].split(':');
-            const fallbackEm = new Date(y, m - 1, d, hora, min, sec).getTime();
-            if (!isNaN(fallbackEm) && fallbackEm >= criadoEm) {
-              totalMs += (fallbackEm - criadoEm);
-              validCount++;
-            }
-          }
+    const linhasHist = String(l.historico || '').split('\n');
+    const linhaRes = linhasHist.find(x => x.includes('RESOLVIDO'));
+    if (!linhaRes) continue;
+
+    const match = linhaRes.match(/\[(.*?)\]/);
+    if (match && match[1]) {
+      const strLimpa = match[1].replace(',', '');
+      const partes = strLimpa.split(' ');
+      if (partes.length >= 2) {
+        const [d, m, y] = partes[0].split('/');
+        const [hora, min, sec] = partes[1].split(':');
+        const resolvidoEm = new Date(y, m - 1, d, hora, min, sec).getTime();
+
+        if (!isNaN(resolvidoEm) && resolvidoEm >= criadoEm) {
+          totalMs += (resolvidoEm - criadoEm);
+          validCount++;
         }
       }
     }
@@ -331,6 +468,7 @@ function calcularMTTR(logs) {
 
   if (validCount === 0) return null;
   const mediaMs = totalMs / validCount;
+
   const minM = Math.floor(mediaMs / 60000);
   if (minM < 60) return `${minM}m`;
   const hrM = Math.floor(minM / 60);
@@ -341,7 +479,75 @@ function calcularMTTR(logs) {
   return restoHr ? `${diasM}d ${restoHr}h` : `${diasM}d`;
 }
 
-// Filtros
+// HEATMAP — conta apenas ERRO + status !== RESOLVIDO
+function contarErrosAbertosPorCliente() {
+  const map = new Map();
+  let totalErros = 0;
+  for (const l of state.logs) {
+    const id = String(l.idCliente);
+    const isErro = String(l.tipoLog || '').toUpperCase() === 'ERRO';
+    const isAberto = String(l.status || 'ABERTO').toUpperCase() !== 'RESOLVIDO';
+
+    if (!map.has(id)) map.set(id, 0);
+
+    if (isErro && isAberto) {
+      map.set(id, map.get(id) + 1);
+      totalErros++;
+    }
+  }
+  return { map, totalErros };
+}
+
+function getNomeCliente(id) {
+  if (!id) return 'Todos os Clientes';
+  const c = state.clientes.find(c => String(c.idCliente) === String(id));
+  return c ? c.nomeCliente : id;
+}
+
+function applySeverityFilter(logs) {
+  const sev = state.ui.severity;
+  if (sev.ERRO && sev.ALERTA && sev.INFO) return logs;
+  return logs.filter(l => {
+    const t = String(l.tipoLog || '').toUpperCase();
+    if (t === 'ERRO')   return sev.ERRO;
+    if (t === 'ALERTA') return sev.ALERTA;
+    if (t === 'INFO')   return sev.INFO;
+    return true;
+  });
+}
+
+function applySearchFilter(items, kind) {
+  const q = state.ui.search;
+  if (!q) return items;
+  if (kind === 'logs') {
+    return items.filter(l =>
+      contains(l.aplicativo, q) ||
+      contains(l.usuario, q) ||
+      contains(l.dispositivo, q) ||
+      contains(l.mensagemErro, q) ||
+      contains(l.tipoLog, q) ||
+      contains(getNomeCliente(l.idCliente), q)
+    );
+  }
+  if (kind === 'auth') {
+    return items.filter(a =>
+      contains(a.aplicativo, q) ||
+      contains(a.usuario, q) ||
+      contains(a.dispositivo, q) ||
+      contains(a.tipoEvento, q) ||
+      contains(a.detalhes, q) ||
+      contains(getNomeCliente(a.idCliente), q)
+    );
+  }
+  return items.filter(s =>
+    contains(s.aplicativo, q) ||
+    contains(s.usuario, q) ||
+    contains(s.dispositivo, q) ||
+    contains(getNomeCliente(s.idCliente), q)
+  );
+}
+
+// [GM-08] filtro temporal in-memory
 function applyTimeFilter(items) {
   if (state.ui.timeRange === 'all') return items;
   const agora = Date.now();
@@ -360,28 +566,39 @@ function applyTimeFilter(items) {
   });
 }
 
+// Pipeline: cliente → severidade (só logs) → tempo → busca
+function getEventsForActiveTab() {
+  if (state.activeTab === 'auth') {
+    const auth = getAuthFiltradosCliente();
+    const tempoFiltrado = applyTimeFilter(auth);
+    return applySearchFilter(tempoFiltrado, 'auth');
+  }
+  if (state.activeTab === 'sessions') {
+    const ses = getSessoesFiltradasCliente();
+    const tempoFiltrado = applyTimeFilter(ses);
+    return applySearchFilter(tempoFiltrado, 'sessions');
+  }
+  const c = getLogsFiltradosCliente();
+  const s = applySeverityFilter(c);
+  const tempoFiltrado = applyTimeFilter(s);
+  return applySearchFilter(tempoFiltrado, 'logs');
+}
+
 function contains(field, q) {
-  if (!field) return false;
+  if (field === null || field === undefined) return false;
   return String(field).toLowerCase().includes(q);
 }
 
-function applySearchFilter(items, kind) {
-  const q = state.ui.search;
-  if (!q) return items;
-  if (kind === 'logs') {
-    return items.filter(l => contains(l.aplicativo, q) || contains(l.usuario, q) || contains(l.mensagemErro, q) || contains(getNomeCliente(l.idCliente), q));
-  }
-  if (kind === 'auth') {
-    return items.filter(a => contains(a.aplicativo, q) || contains(a.usuario, q) || contains(a.tipoEvento, q) || contains(getNomeCliente(a.idCliente), q));
-  }
-  return items.filter(s => contains(s.aplicativo, q) || contains(s.usuario, q) || contains(getNomeCliente(s.idCliente), q));
-}
+const CAP_STATUS_ORDER = ['CRITICO', 'ALERTA', 'ATENCAO', 'OFFLINE', 'PENDING', 'SAUDAVEL', 'MIGRADO'];
 
-function getEventsForActiveTab() {
-  if (state.activeTab === 'auth') return applySearchFilter(applyTimeFilter(getAuthFiltradosCliente()), 'auth');
-  if (state.activeTab === 'sessions') return applySearchFilter(applyTimeFilter(getSessoesFiltradasCliente()), 'sessions');
-  const logs = getLogsFiltradosCliente().filter(l => state.ui.severity[String(l.tipoLog || 'INFO').toUpperCase()] === true);
-  return applySearchFilter(applyTimeFilter(logs), 'logs');
+function contarSaudePorStatus() {
+  const map = { SAUDAVEL: 0, ATENCAO: 0, ALERTA: 0, CRITICO: 0, OFFLINE: 0, MIGRADO: 0, PENDING: 0 };
+  for (const a of state.saudeApps) {
+    const st = String(a.status || 'PENDING').toUpperCase();
+    if (st in map) map[st]++;
+    else map.PENDING++;
+  }
+  return map;
 }
 
 function contarSaudeAlertas() {
@@ -393,141 +610,222 @@ function contarSaudeAlertas() {
   return n;
 }
 
-// ============================================================================
-// 7. RENDER LAYER
-// ============================================================================
-function contarErrosAbertosPorCliente() {
-  const map = new Map();
-  let totalErros = 0;
-  for (const l of state.logs) {
-    if (String(l.tipoLog).toUpperCase() === 'ERRO' && String(l.status).toUpperCase() !== 'RESOLVIDO') {
-      const id = String(l.idCliente);
-      map.set(id, (map.get(id) || 0) + 1);
-      totalErros++;
-    }
+function isAnyExtraFilterActive() {
+  if (state.ui.search) return true;
+  if (state.ui.timeRange !== 'all') return true;
+  if (state.activeTab === 'logs') {
+    const s = state.ui.severity;
+    if (!(s.ERRO && s.ALERTA && s.INFO)) return true;
   }
-  return { map, totalErros };
+  return false;
 }
 
+// ============================================================================
+// 8. RENDER LAYER — Sidebar (HEATMAP de erros críticos abertos)
+// ============================================================================
 function renderSidebar() {
   const ul = dom.clientList;
   if (!ul) return;
   ul.textContent = '';
-  
   const { map: contagensErros, totalErros } = contarErrosAbertosPorCliente();
   const ativoId = state.filtroClienteId;
-  ul.appendChild(buildClientItem('', 'Todos os Clientes', totalErros, ativoId === '', 'client-item--all'));
+
+  ul.appendChild(buildClientItem({
+    id: '', nome: 'Todos os Clientes',
+    count: totalErros, ativo: ativoId === '',
+    modificador: 'client-item--all'
+  }));
 
   if (!state.clientes.length) {
-    ul.innerHTML += '<li class="client-list__placeholder">Nenhum cliente cadastrado.</li>';
+    const li = document.createElement('li');
+    li.className = 'client-list__placeholder';
+    li.textContent = 'Nenhum cliente cadastrado.';
+    ul.appendChild(li);
     return;
   }
+
   for (const c of state.clientes) {
     const id = String(c.idCliente);
-    ul.appendChild(buildClientItem(id, c.nomeFantasia || c.nome || id, contagensErros.get(id) || 0, ativoId === id));
+    ul.appendChild(buildClientItem({
+      id, nome: c.nomeCliente || id,
+      count: contagensErros.get(id) || 0,
+      ativo: ativoId === id
+    }));
   }
 }
 
-function buildClientItem(id, nome, count, ativo, mod = '') {
+function buildClientItem({ id, nome, count, ativo, modificador }) {
   const li = document.createElement('li');
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = `client-item ${ativo ? 'client-item--active' : ''} ${mod}`;
+  btn.className = 'client-item' + (ativo ? ' client-item--active' : '') +
+                  (modificador ? ' ' + modificador : '');
   btn.dataset.clientId = id;
-  
+  btn.setAttribute('aria-pressed', ativo ? 'true' : 'false');
+
   const nameEl = document.createElement('span');
   nameEl.className = 'client-item__name';
   nameEl.textContent = nome;
 
   const countEl = document.createElement('span');
   countEl.className = 'client-item__count';
+
+  // HEATMAP: vermelho se houver erro crítico aberto, "0" sutil caso contrário
   if (count > 0) {
-    countEl.style.cssText = 'background:rgba(239,68,68,0.15); color:#EF4444; border:1px solid rgba(239,68,68,0.3); font-weight:bold;';
+    countEl.style.backgroundColor = 'rgba(239, 68, 68, 0.15)';
+    countEl.style.color = '#EF4444';
+    countEl.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+    countEl.style.fontWeight = 'bold';
   }
+
   countEl.textContent = count;
 
-  btn.append(nameEl, countEl);
+  btn.appendChild(nameEl);
+  btn.appendChild(countEl);
   li.appendChild(btn);
   return li;
 }
 
-function computeKPIs() {
-  const totais = state.totais || {};
-  const ops = state.operacionais || {};
-  const isGlobal = !state.filtroClienteId;
-  
-  if (isGlobal) {
-    return {
-      clientes: totais.clientes || 0,
-      online: ops.appsMonitorados || state.sessoesAtivas.length,
-      erros24h: totais.erros24h || 0,
-      auth24h: totais.autenticacoes24h || 0,
-      taxaErro: typeof ops.taxaErro === 'string' ? ops.taxaErro : `${ops.taxaErro || 0}%`,
-      loginsFalhos: ops.loginsFalhos24h || 0,
-      apps: ops.appsMonitorados || state.saudeApps.length,
-      totalLogs: totais.logs || state.logs.length
-    };
-  }
-  
-  const logsCli = getLogsFiltradosCliente();
-  const authCli = getAuthFiltradosCliente();
-  const logs24h = applyTimeFilter(logsCli);
-  const erros24h = logs24h.filter(l => String(l.tipoLog).toUpperCase() === 'ERRO').length;
-  const taxaErroNum = logs24h.length ? Math.round((erros24h / logs24h.length) * 100) : 0;
-
-  return {
-    clientes: 1,
-    online: getSessoesFiltradasCliente().length,
-    erros24h,
-    auth24h: applyTimeFilter(authCli).length,
-    taxaErro: `${taxaErroNum}%`,
-    loginsFalhos: authCli.filter(a => String(a.tipoEvento).toUpperCase() === 'LOGIN_FALHA').length,
-    apps: state.saudeApps.filter(a => String(a.idCliente) === state.filtroClienteId).length,
-    totalLogs: logsCli.length
-  };
-}
-
+// ============================================================================
+// 9. RENDER LAYER — Main + KPIs híbridos (consistentes com filtro de cliente)
+// ============================================================================
 function renderMain() {
   renderHeader();
-  const kpis = computeKPIs();
-  
-  if (dom.kpiMain.clientes) dom.kpiMain.clientes.textContent = formatNumber(kpis.clientes);
-  if (dom.kpiMain.online)   dom.kpiMain.online.textContent   = formatNumber(kpis.online);
-  if (dom.kpiMain.erros24h) dom.kpiMain.erros24h.textContent = formatNumber(kpis.erros24h);
-  if (dom.kpiMain.auth24h)  dom.kpiMain.auth24h.textContent  = formatNumber(kpis.auth24h);
-
-  if (dom.kpiOps.taxaErro)        dom.kpiOps.taxaErro.textContent        = kpis.taxaErro;
-  if (dom.kpiOps.loginsFalhos)    dom.kpiOps.loginsFalhos.textContent    = formatNumber(kpis.loginsFalhos);
-  if (dom.kpiOps.appsMonitorados) dom.kpiOps.appsMonitorados.textContent = formatNumber(kpis.apps);
-  if (dom.kpiOps.totalLogs)       dom.kpiOps.totalLogs.textContent       = formatNumber(kpis.totalLogs);
-
+  renderKPIsMain();      // 4 cards principais
+  renderKPIsOps();       // 4 cards operacionais
   renderLiveStrip();
   renderTabs();
   renderToolbarVisibility();
   renderSeverityPills();
   renderSearchClearVisibility();
   renderEventsList();
+  renderCapacityBadge();
+  if (state.ui.capacityOpen) renderCapacityDrawer();
+}
+
+function renderHeader() {
+  const filtrando = !!state.filtroClienteId;
+  const nome = getNomeCliente(state.filtroClienteId);
+
+  if (dom.mainTitle) {
+    dom.mainTitle.textContent = filtrando ? nome : 'Central de Desenvolvedor';
+  }
+  if (dom.mainSubtitle) {
+    dom.mainSubtitle.textContent = filtrando
+      ? `Telemetria isolada do cliente ${nome}`
+      : 'God Mode';
+  }
+
+  const ts = state.geradoEm ? `· atualizado ${relativeTime(state.geradoEm)}` : '';
+  const total = getEventsForActiveTab().length;
+  const filtroAtivo = isAnyExtraFilterActive() ? ' (filtrados)' : '';
+  if (dom.logsMeta) {
+    dom.logsMeta.textContent = `${formatNumber(total)} evento(s)${filtroAtivo} ${ts}`;
+  }
+}
+
+const _MS_24H = 24 * 60 * 60 * 1000;
+
+function _isWithin24h(iso) {
+  if (!iso) return false;
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return false;
+  return (Date.now() - t) <= _MS_24H;
+}
+
+function computeKPIs() {
+  const totais       = state.totais       || {};
+  const operacionais = state.operacionais || {};
+  const filtroAtivo  = !!state.filtroClienteId;
+
+  if (!filtroAtivo) {
+    return {
+      clientes:        Number(totais.clientes ?? state.clientes.length) || 0,
+      online:          Number(operacionais.appsMonitorados ?? state.sessoesAtivas.length) || state.sessoesAtivas.length,
+      erros24h:        Number(totais.erros24h ?? operacionais.erros24h ?? 0),
+      auth24h:         Number(totais.autenticacoes24h ?? 0),
+      taxaErro:        Number(operacionais.taxaErro ?? 0),
+      loginsFalhos24h: Number(operacionais.loginsFalhos24h ?? 0),
+      appsMonitorados: Number(operacionais.appsMonitorados ?? state.saudeApps.length) || state.saudeApps.length,
+      totalLogs:       Number(totais.logs ?? state.logs.length) || state.logs.length
+    };
+  }
+
+  const cid = String(state.filtroClienteId);
+
+  const logsCli = state.logs.filter(l => String(l.idCliente) === cid);
+  const authCli = state.eventosAuth.filter(a => String(a.idCliente) === cid);
+  const sessCli = state.sessoesAtivas.filter(s => String(s.idCliente) === cid);
+  const appsCli = state.saudeApps.filter(a => String(a.idCliente) === cid);
+
+  const logs24h     = logsCli.filter(l => _isWithin24h(l.timestamp));
+  const erros24h    = logs24h.filter(l => String(l.tipoLog || '').toUpperCase() === 'ERRO').length;
+  const auth24h     = authCli.filter(a => _isWithin24h(a.timestamp)).length;
+  const loginsFalhos24h = authCli.filter(a =>
+    _isWithin24h(a.timestamp) &&
+    String(a.tipoEvento || '').toUpperCase() === 'LOGIN_FALHA'
+  ).length;
+
+  const taxaErro = logs24h.length > 0
+    ? (erros24h / logs24h.length) * 100
+    : 0;
+
+  return {
+    clientes:        1,
+    online:          sessCli.length,
+    erros24h:        erros24h,
+    auth24h:         auth24h,
+    taxaErro:        taxaErro,
+    loginsFalhos24h: loginsFalhos24h,
+    appsMonitorados: appsCli.length,
+    totalLogs:       logsCli.length
+  };
+}
+
+function _formatTaxaErro(n) {
+  if (!Number.isFinite(n)) return '—';
+  if (typeof n === 'string') return n;
+  if (n === 0) return '0%';
+  if (n < 1)  return n.toFixed(2) + '%';
+  if (n < 10) return n.toFixed(1) + '%';
+  return Math.round(n) + '%';
+}
+
+function renderKPIsMain() {
+  const k = computeKPIs();
+  if (dom.kpiMain.clientes) dom.kpiMain.clientes.textContent = formatNumber(k.clientes);
+  if (dom.kpiMain.online)   dom.kpiMain.online.textContent   = formatNumber(k.online);
+  if (dom.kpiMain.erros24h) dom.kpiMain.erros24h.textContent = formatNumber(k.erros24h);
+  if (dom.kpiMain.auth24h)  dom.kpiMain.auth24h.textContent  = formatNumber(k.auth24h);
+}
+
+function renderKPIsOps() {
+  const k = computeKPIs();
+  if (dom.kpiOps.taxaErro) {
+    const tx = (typeof k.taxaErro === 'string')
+      ? k.taxaErro
+      : _formatTaxaErro(k.taxaErro);
+    dom.kpiOps.taxaErro.textContent = tx;
+  }
+  if (dom.kpiOps.loginsFalhos)    dom.kpiOps.loginsFalhos.textContent    = formatNumber(k.loginsFalhos24h);
+  if (dom.kpiOps.appsMonitorados) dom.kpiOps.appsMonitorados.textContent = formatNumber(k.appsMonitorados);
+  if (dom.kpiOps.totalLogs)       dom.kpiOps.totalLogs.textContent       = formatNumber(k.totalLogs);
   
+  // MTTR Global [GM-06]
   if (dom.kpiOps.totalLogs && !state.filtroClienteId) {
     const mttr = calcularMTTR(state.logs);
     dom.kpiOps.totalLogs.title = `MTTR Global: ${mttr || 'N/A'}`; 
   }
 }
 
-function renderHeader() {
-  const nome = getNomeCliente(state.filtroClienteId);
-  const filtrando = !!state.filtroClienteId;
-  if (dom.mainTitle) dom.mainTitle.textContent = filtrando ? nome : 'Central de Desenvolvedor';
-  if (dom.mainSubtitle) dom.mainSubtitle.textContent = filtrando ? `Telemetria isolada do cliente ${nome}` : 'God Mode';
-  
-  const total = getEventsForActiveTab().length;
-  if (dom.logsMeta) dom.logsMeta.textContent = `${formatNumber(total)} evento(s) listado(s)`;
-}
-
+// ============================================================================
+// 10. RENDER LAYER — Live Activity Strip
+// ============================================================================
 function renderLiveStrip() {
   const list = dom.liveStripList;
   if (!list) return;
   list.textContent = '';
+
   const sessoes = state.sessoesAtivas;
 
   if (!sessoes.length) {
@@ -536,69 +834,167 @@ function renderLiveStrip() {
     return;
   }
   delete list.dataset.empty;
-  if (dom.liveStripMeta) dom.liveStripMeta.textContent = `${sessoes.length} ativo(s)`;
+  if (dom.liveStripMeta) {
+    dom.liveStripMeta.textContent = `${sessoes.length} ${sessoes.length === 1 ? 'ativo' : 'ativos'}`;
+  }
 
-  sessoes.slice(0, 10).forEach(s => {
-    const chip = document.createElement('div');
-    chip.className = 'live-chip';
-    chip.innerHTML = `
-      <div class="live-chip__avatar" style="background:${gradientFromString(s.usuario)}">${initials(s.usuario)}</div>
-      <div class="live-chip__body">
-        <span class="live-chip__name">${escapeHtml(s.usuario || '—')}</span>
-        <span class="live-chip__sub">${escapeHtml(s.aplicativo)} · online</span>
-      </div>`;
-    list.appendChild(chip);
+  const frag = document.createDocumentFragment();
+  for (const s of sessoes) frag.appendChild(buildLiveChip(s));
+  list.appendChild(frag);
+}
+
+function buildLiveChip(sessao) {
+  const chip = document.createElement('div');
+  chip.className = 'live-chip';
+  chip.setAttribute('role', 'listitem');
+  chip.title =
+    `Usuário: ${sessao.usuario}\n` +
+    `App: ${sessao.aplicativo}\n` +
+    `Cliente: ${getNomeCliente(sessao.idCliente)}\n` +
+    `Dispositivo: ${sessao.dispositivo}\n` +
+    `Online há: ${formatDuration(sessao.inicioSessao)}`;
+
+  const avatar = document.createElement('div');
+  avatar.className = 'live-chip__avatar';
+  avatar.textContent = initials(sessao.usuario);
+  avatar.style.background = gradientFromString(sessao.usuario);
+
+  const body = document.createElement('div');
+  body.className = 'live-chip__body';
+
+  const name = document.createElement('span');
+  name.className = 'live-chip__name';
+  name.textContent = sessao.usuario || '—';
+
+  const sub = document.createElement('span');
+  sub.className = 'live-chip__sub';
+  sub.textContent = `${sessao.aplicativo} · há ${formatDuration(sessao.inicioSessao)}`;
+
+  body.appendChild(name);
+  body.appendChild(sub);
+  chip.appendChild(avatar);
+  chip.appendChild(body);
+  return chip;
+}
+
+function formatDuration(iso) {
+  if (!iso) return '—';
+  const date = new Date(iso);
+  if (isNaN(date.getTime())) return '—';
+  const sec = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+  if (sec < 60) return `${sec}s`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}min`;
+  const hr = Math.floor(min / 60);
+  const restoMin = min % 60;
+  if (hr < 24) return restoMin ? `${hr}h${restoMin}min` : `${hr}h`;
+  const d = Math.floor(hr / 24);
+  return `${d}d`;
+}
+
+function formatAbsoluteTime(iso) {
+  if (!iso) return '—';
+  const date = new Date(iso);
+  if (isNaN(date.getTime())) return String(iso);
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  }).format(date);
+}
+
+// ============================================================================
+// 11. RENDER LAYER — Tabs + Toolbar + Severity Pills + Search Clear
+// ============================================================================
+function renderTabs() {
+  const counts = {
+    logs:     getLogsFiltradosCliente().length,
+    auth:     getAuthFiltradosCliente().length,
+    sessions: getSessoesFiltradasCliente().length
+  };
+  if (dom.tabCounts.logs)     dom.tabCounts.logs.textContent     = formatNumber(counts.logs);
+  if (dom.tabCounts.auth)     dom.tabCounts.auth.textContent     = formatNumber(counts.auth);
+  if (dom.tabCounts.sessions) dom.tabCounts.sessions.textContent = formatNumber(counts.sessions);
+
+  if (!dom.eventTabs) return;
+  const buttons = dom.eventTabs.querySelectorAll('.tab');
+  buttons.forEach(btn => {
+    const isActive = btn.dataset.tab === state.activeTab;
+    btn.classList.toggle('tab--active', isActive);
+    btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
   });
 }
 
-function renderTabs() {
-  if (dom.tabCounts.logs) dom.tabCounts.logs.textContent = formatNumber(getLogsFiltradosCliente().length);
-  if (dom.tabCounts.auth) dom.tabCounts.auth.textContent = formatNumber(getAuthFiltradosCliente().length);
-  if (dom.tabCounts.sessions) dom.tabCounts.sessions.textContent = formatNumber(getSessoesFiltradasCliente().length);
-
-  if (dom.eventTabs) {
-    dom.eventTabs.querySelectorAll('.tab').forEach(btn => {
-      btn.classList.toggle('tab--active', btn.dataset.tab === state.activeTab);
-    });
-  }
-}
-
 function renderToolbarVisibility() {
-  if (dom.severityPills) dom.severityPills.hidden = (state.activeTab !== 'logs');
+  if (!dom.severityPills) return;
+  const showPills = state.activeTab === 'logs';
+  dom.severityPills.hidden = !showPills;
+  if (dom.searchInput) {
+    const placeholders = {
+      logs:     'Buscar em mensagens, apps, usuários…',
+      auth:     'Buscar em eventos, usuários, apps…',
+      sessions: 'Buscar em sessões, usuários, dispositivos…'
+    };
+    dom.searchInput.placeholder = placeholders[state.activeTab] || 'Buscar…';
+  }
 }
 
 function renderSeverityPills() {
   if (!dom.severityPills) return;
   const logs = getLogsFiltradosCliente();
   const counts = { ERRO: 0, ALERTA: 0, INFO: 0 };
-  logs.forEach(l => { const t = String(l.tipoLog || '').toUpperCase(); if (t in counts) counts[t]++; });
-
+  for (const l of logs) {
+    const t = String(l.tipoLog || '').toUpperCase();
+    if (t in counts) counts[t]++;
+  }
   if (dom.pillCountErro)   dom.pillCountErro.textContent   = formatNumber(counts.ERRO);
   if (dom.pillCountAlerta) dom.pillCountAlerta.textContent = formatNumber(counts.ALERTA);
   if (dom.pillCountInfo)   dom.pillCountInfo.textContent   = formatNumber(counts.INFO);
 
-  dom.severityPills.querySelectorAll('.pill').forEach(p => {
-    p.classList.toggle('is-active', !!state.ui.severity[p.dataset.severity]);
+  const pills = dom.severityPills.querySelectorAll('.pill[data-severity]');
+  pills.forEach(p => {
+    const sev = p.dataset.severity;
+    const active = !!state.ui.severity[sev];
+    p.classList.toggle('is-active', active);
+    p.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
 }
 
 function renderSearchClearVisibility() {
-  if (dom.searchClearBtn) dom.searchClearBtn.style.visibility = state.ui.search ? 'visible' : 'hidden';
+  if (!dom.searchClearBtn) return;
+  dom.searchClearBtn.style.visibility = state.ui.search ? 'visible' : 'hidden';
 }
 
+// ============================================================================
+// 12. RENDER LAYER — Events List (Dispatcher + Cards)
+// ============================================================================
 function renderEventsList() {
   const list = dom.logsList;
   if (!list) return;
   list.textContent = '';
 
-  const items = getEventsForActiveTab().sort((a,b) => new Date(b.timestamp || b.inicioSessao) - new Date(a.timestamp || a.inicioSessao));
+  if (state.isLoading && state.logs.length === 0 &&
+      state.eventosAuth.length === 0 && state.sessoesAtivas.length === 0) {
+    list.appendChild(buildEmptyState({
+      icon: '◐',
+      title: 'Carregando eventos…',
+      text: 'Buscando dados da Planilha Mestra.'
+    }));
+    return;
+  }
 
+  if (state.error) {
+    list.appendChild(buildErrorState());
+    return;
+  }
+
+  const items = getEventsForActiveTab().sort((a,b) => new Date(b.timestamp || b.inicioSessao) - new Date(a.timestamp || a.inicioSessao));
   if (!items.length) {
-    list.innerHTML = `<div class="empty-state"><div class="empty-state__icon">✓</div><p class="empty-state__title">Nenhum registro encontrado</p></div>`;
+    list.appendChild(buildEmptyStateForTab());
     return;
   }
 
   const frag = document.createDocumentFragment();
+  
   items.slice(0, 100).forEach(item => {
     const card = document.createElement('article');
     
@@ -638,7 +1034,7 @@ function renderEventsList() {
       card.onclick = () => openDetailDrawer('auth', item);
     }
     else if (state.activeTab === 'sessions') {
-      const isOnline = String(item.status).toUpperCase() === 'ATIVA';
+      const isOnline = String(item.status).toUpperCase() === 'ATIVA' || item.online;
       card.className = 'session-card';
       card.innerHTML = `
         <div class="session-card__avatar" style="background:${gradientFromString(item.usuario)}">${initials(item.usuario)}</div>
@@ -662,6 +1058,100 @@ function renderEventsList() {
     frag.appendChild(card);
   });
   list.appendChild(frag);
+}
+
+function buildEmptyState({ icon, title, text }) {
+  const wrap = document.createElement('div');
+  wrap.className = 'empty-state';
+  const i = document.createElement('div');
+  i.className = 'empty-state__icon';
+  i.setAttribute('aria-hidden', 'true');
+  i.textContent = icon;
+  const t = document.createElement('p');
+  t.className = 'empty-state__title';
+  t.textContent = title;
+  const d = document.createElement('p');
+  d.className = 'empty-state__text';
+  d.textContent = text;
+  wrap.appendChild(i);
+  wrap.appendChild(t);
+  wrap.appendChild(d);
+  return wrap;
+}
+
+function buildEmptyStateForTab() {
+  const filtrando = !!state.filtroClienteId;
+  const cliente = getNomeCliente(state.filtroClienteId);
+  const buscando = !!state.ui.search;
+
+  if (buscando) {
+    return buildEmptyState({
+      icon: '⌕',
+      title: 'Nada encontrado',
+      text: `Nenhum resultado para "${state.ui.search}". Limpe a busca ou tente outros termos.`
+    });
+  }
+
+  if (state.activeTab === 'logs') {
+    const s = state.ui.severity;
+    const todasOff = !s.ERRO && !s.ALERTA && !s.INFO;
+    if (todasOff) {
+      return buildEmptyState({
+        icon: '◌',
+        title: 'Filtros desligados',
+        text: 'Ative ao menos uma severidade (Erro, Alerta ou Info) para ver logs.'
+      });
+    }
+    return buildEmptyState({
+      icon: '✓',
+      title: 'Nenhum log registrado',
+      text: filtrando
+        ? `${cliente} não possui logs no período carregado.`
+        : 'O ecossistema está silencioso. Bom sinal.'
+    });
+  }
+  if (state.activeTab === 'auth') {
+    return buildEmptyState({
+      icon: '◌',
+      title: 'Nenhum evento de autenticação',
+      text: filtrando
+        ? `${cliente} não tem eventos de auth registrados.`
+        : 'Nenhum login ou logout foi registrado ainda.'
+    });
+  }
+  return buildEmptyState({
+    icon: '○',
+    title: 'Nenhuma sessão ativa',
+    text: filtrando
+      ? `${cliente} não tem usuários online no momento.`
+      : 'Nenhum usuário está online agora.'
+  });
+}
+
+function buildErrorState() {
+  const wrap = document.createElement('div');
+  wrap.className = 'empty-state';
+  const i = document.createElement('div');
+  i.className = 'empty-state__icon';
+  i.style.color = 'var(--danger)';
+  i.textContent = '⚠';
+  const t = document.createElement('p');
+  t.className = 'empty-state__title';
+  t.textContent = 'Falha ao carregar dados';
+  const d = document.createElement('p');
+  d.className = 'empty-state__text';
+  d.textContent = state.error?.message || 'Verifique a URL e a API_KEY.';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn btn--ghost';
+  btn.style.marginTop = '20px';
+  btn.textContent = 'Tentar novamente';
+  btn.addEventListener('click', loadData);
+  wrap.appendChild(i);
+  wrap.appendChild(t);
+  wrap.appendChild(d);
+  wrap.appendChild(btn);
+  return wrap;
 }
 
 // ============================================================================
@@ -770,6 +1260,7 @@ function updateConnectionStatus() {
 function updateRefreshButton() {
   if (!dom.refreshBtn) return;
   dom.refreshBtn.disabled = state.isLoading;
+  dom.refreshBtn.classList.toggle('is-loading', state.isLoading);
 }
 
 // ============================================================================
@@ -806,9 +1297,9 @@ function applyTheme(theme, withTransition) {
 // 11. EXPORT CSV & PDF [GM-09]
 // ============================================================================
 const CSV_HEADERS = {
-  logs:     ['timestamp', 'tipoLog', 'idCliente', 'cliente', 'aplicativo', 'usuario', 'dispositivo', 'mensagemErro'],
-  auth:     ['timestamp', 'tipoEvento', 'idCliente', 'cliente', 'aplicativo', 'usuario', 'dispositivo', 'detalhes'],
-  sessions: ['inicioSessao', 'ultimoPing', 'idCliente', 'cliente', 'aplicativo', 'usuario', 'dispositivo']
+  logs:     ['timestamp', 'tipoLog', 'idCliente', 'aplicativo', 'usuario', 'dispositivo', 'mensagemErro', 'status'],
+  auth:     ['timestamp', 'tipoEvento', 'idCliente', 'aplicativo', 'usuario', 'dispositivo', 'detalhes', 'ip'],
+  sessions: ['inicioSessao', 'ultimoPing', 'idCliente', 'aplicativo', 'usuario', 'dispositivo', 'ip']
 };
 
 function exportCurrentTabAsCSV() {
@@ -822,8 +1313,7 @@ function exportCurrentTabAsCSV() {
   const lines = [headers.join(',')];
 
   for (const item of items) {
-    const enriched = { ...item, cliente: getNomeCliente(item.idCliente) };
-    const row = headers.map(h => csvEscape(enriched[h]));
+    const row = headers.map(h => csvEscape(item[h]));
     lines.push(row.join(','));
   }
 
@@ -853,10 +1343,7 @@ function exportCurrentTabAsPDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF('l', 'pt', 'a4');
     const headers = CSV_HEADERS[tab];
-    const body = items.map(item => {
-      const enriched = { ...item, cliente: getNomeCliente(item.idCliente) };
-      return headers.map(h => String(enriched[h] || ''));
-    });
+    const body = items.map(item => headers.map(h => String(item[h] || '')));
 
     const titles = { logs: 'Logs e Erros', auth: 'Autenticações', sessions: 'Sessões Ativas' };
     doc.setFontSize(16);
@@ -1001,6 +1488,9 @@ export async function openQuotaMonitor() {
         <div id="capMonBody" style="padding:16px 20px;overflow-y:auto;flex:1;color:#000;">
           <p style="color:#6b7280;">Buscando dados de licenciamento...</p>
         </div>
+        <div style="padding:12px 20px;border-top:1px solid #e5e7eb;background:#f9fafb;display:flex;justify-content:flex-end;gap:8px;">
+          <button type="button" data-close class="btn btn--ghost">Fechar</button>
+        </div>
       </div>`;
     document.body.appendChild(modal);
 
@@ -1037,8 +1527,8 @@ export async function openQuotaMonitor() {
         <tbody>
           ${data.clientes.map(c => `
             <tr style="border-bottom:1px solid #e5e7eb;">
-              <td style="padding:10px;"><strong>${c.nome}</strong><br><small style="color:#6b7280;">${c.idCliente}</small></td>
-              <td style="padding:10px;">${c.plano}</td>
+              <td style="padding:10px;"><strong>${escapeHtml(c.nome)}</strong><br><small style="color:#6b7280;">${escapeHtml(c.idCliente)}</small></td>
+              <td style="padding:10px;">${escapeHtml(c.plano)}</td>
               <td style="padding:10px;">
                 <div style="display:flex;align-items:center;gap:8px;">
                   <div style="flex:1;height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden;">
@@ -1057,10 +1547,9 @@ export async function openQuotaMonitor() {
         </tbody>
       </table>`;
   } catch (e) {
-    body.innerHTML = `<div style="background:#fee2e2;color:#991b1b;padding:12px;border-radius:6px;">❌ Falha ao carregar as Quotas: ${e.message}</div>`;
+    body.innerHTML = `<div style="background:#fee2e2;color:#991b1b;padding:12px;border-radius:6px;">❌ Falha ao carregar as Quotas: ${escapeHtml(e.message)}</div>`;
   }
 }
-
 // ============================================================================
 // 14. FORMULÁRIO NOVO CLIENTE
 // ============================================================================
@@ -1182,7 +1671,7 @@ function bindEvents() {
   if (dom.exportPdfBtn) dom.exportPdfBtn.addEventListener('click', exportCurrentTabAsPDF);
   if (dom.capacityBtn)  dom.capacityBtn.addEventListener('click', openCapacityDrawer);
   
-  // Delegação de fechar modais/drawers
+  // Delegação de fechar modais/drawers (Procura por [data-close] ou botões específicos)
   document.addEventListener('click', e => {
     if (e.target.closest('#capacityDrawerCloseBtn') || e.target.closest('#capacityDrawer .drawer__backdrop')) {
       closeCapacityDrawer();
@@ -1203,7 +1692,7 @@ function bindEvents() {
   const formNovoCliente = document.getElementById('formNovoCliente');
   if (formNovoCliente) formNovoCliente.addEventListener('submit', handleNewClientSubmit);
 
-  // Máscaras de formulário
+  // Máscaras e comportamentos de formulário
   const cnpjInput = document.getElementById('ncCnpj');
   if (cnpjInput) {
     cnpjInput.addEventListener('input', (e) => {
@@ -1315,4 +1804,5 @@ if (document.readyState === 'loading') {
   init();
 }
 
+// Torna o Monitor de Clientes (V3) disponível globalmente se precisar ser chamado de fora
 window.openQuotaMonitor = openQuotaMonitor;
