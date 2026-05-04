@@ -71,9 +71,9 @@ const state = {
   error: null,
   geradoEm: null,
 
-  ui: {
+  uiui: {
     search: '',
-    timeRange: 'all',                       // [GM-08]
+    timeRange: '24h', // Mude de 'all' para '24h'
     severity: { ERRO: true, ALERTA: true, INFO: true },
     theme: 'light',
     capacityOpen: false,
@@ -2022,22 +2022,23 @@ async function init() {
   state.ui.theme = detectInitialTheme();
   applyTheme(state.ui.theme, false);
 
-  validateSessionOnBoot().catch(() => {});
+  // 1. Prepara os cliques e botões primeiro
   bindEvents();
   
-  await loadData();
-  startAutoRefresh();
-  startLocalTick();
-
+  // 2. MOSTRA A PÁGINA AGORA (Remove o loading antes de baixar os dados)
   document.body.classList.add('pronto');
   const tampa = document.getElementById('tampa-carregamento');
-  if (tampa) { tampa.style.opacity = '0'; setTimeout(() => tampa.remove(), 400); }
-}
+  if (tampa) { 
+    tampa.style.opacity = '0'; 
+    setTimeout(() => tampa.remove(), 400); 
+  }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  init();
+  // 3. BUSCA OS DADOS EM "BACKGROUND" (Sem travar a sua visão)
+  loadData(); // Sem o 'await' aqui para não bloquear a tela
+  startAutoRefresh();
+  startLocalTick();
+  
+  validateSessionOnBoot().catch(() => {});
 }
 
 // Torna o Monitor de Clientes (V3) disponível globalmente se precisar ser chamado de fora
