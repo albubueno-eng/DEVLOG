@@ -1826,6 +1826,14 @@ function closeNewClientModal() {
       return; // Trava aqui se houver erros visíveis (Borda Vermelha)
     }
 
+    // NOVA TRAVA: Captura os Apps selecionados nas caixinhas do HTML
+    const appsSelecionados = Array.from(form.querySelectorAll('input[name="ncApps"]:checked')).map(cb => cb.value);
+    
+    if (appsSelecionados.length === 0) {
+      showBanner('Selecione pelo menos um App Contratado!', 'error');
+      return; // Trava se não escolheu nem Ponto nem Estoque
+    }
+
     const payload = {
       idCliente:         fields.idCliente.value.trim().toLowerCase(),
       nome:              fields.razaoSocial.value.trim(),
@@ -1837,6 +1845,7 @@ function closeNewClientModal() {
       quotaFuncionarios: Number(fields.quota.value),
       logoUrl:           fields.logoUrl.value.trim(),
       corPrimaria:       fields.corPrim.value.trim() || '#2563eb',
+      appsContratados:   appsSelecionados.join(','), // ENVIANDO OS APPS AQUI
       ativo:             true
     };
 
@@ -1858,7 +1867,6 @@ function closeNewClientModal() {
       if (btnSpinner) btnSpinner.hidden = true;
     }
   });
-})();
 
 // ============================================================================
 // 15. BIND EVENTS
