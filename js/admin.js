@@ -2043,3 +2043,424 @@ async function init() {
 
 // Torna o Monitor de Clientes (V3) disponível globalmente se precisar ser chamado de fora
 window.openQuotaMonitor = openQuotaMonitor;
+
+
+/* ============================================================================
+ * PATCH C7 — Product Insights UI
+ * ----------------------------------------------------------------------------
+ * Adiciona botão "Insights" na topbar e modal com:
+ *  - Health Score
+ *  - Migration Readiness
+ *  - Seats
+ *  - Uso por app
+ *  - Incidentes agrupados
+ * ========================================================================== */
+
+function initProductInsightsButton() {
+  const topbar = document.querySelector('.topbar__actions');
+  if (!topbar) return;
+
+  if (document.getElementById('productInsightsBtn')) return;
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.id = 'productInsightsBtn';
+  btn.className = 'btn btn--ghost btn--small';
+  btn.title = 'Product Insights';
+  btn.textContent = '🧠 Insights';
+
+  btn.addEventListener('click', openProductInsightsModal);
+
+  topbar.insertBefore(btn, topbar.firstChild);
+}
+
+async function openProductInsightsModal() {
+  let modal = document.getElementById('productInsightsModal');
+
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'productInsightsModal';
+    modal.style.cssText = [
+      'position:fixed',
+      'inset:0',
+      'z-index:10000',
+      'display:flex',
+      'align-items:center',
+      'justify-content:center',
+      'padding:20px'
+    ].join(';');
+
+    modal.innerHTML = `
+      <div data-close style="position:absolute;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);"></div>
+
+      <div style="
+        position:relative;
+        width:min(1120px, 96vw);
+        max-height:88vh;
+        background:var(--bg-surface,#fff);
+        color:var(--text-primary,#111827);
+        border-radius:16px;
+        box-shadow:0 24px 80px rgba(0,0,0,.35);
+        overflow:hidden;
+        display:flex;
+        flex-direction:column;
+        border:1px solid var(--border-soft,#e5e7eb);
+      ">
+        <header style="
+          padding:18px 22px;
+          border-bottom:1px solid var(--border-divider,#e5e7eb);
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap:16px;
+        ">
+          <div>
+            <h2 style="margin:0;font-size:18px;font-weight:700;">🧠 Product Insights</h2>
+            <p id="productInsightsMeta" style="margin:2px 0 0;color:var(--text-muted,#6b7280);font-size:12px;">Carregando…</p>
+          </div>
+          <button data-close type="button" class="btn btn--ghost btn--small">Fechar</button>
+        </header>
+
+        <main id="productInsightsBody" style="
+          padding:18px 22px;
+          overflow:auto;
+          display:flex;
+          flex-direction:column;
+          gap:18px;
+        ">
+          <div style="color:var(--text-muted,#6b7280);">Carregando insights…</div>
+        </main>
+      </div>
+    `;
+
+    modal.addEventListener('click', function (e) {
+      if (e.target.matches('[data-close]') || e.target.closest('[data-close]')) {
+        modal.hidden = true;
+      }
+    });
+
+    document.body.appendChild(modal);
+  }
+
+  modal.hidden = false;
+
+  const body = document.getElementById('productInsightsBody');
+  const meta = document.getElementById('productInsightsMeta');
+
+  body.innerHTML = `<div style="color:var(--text-muted,#6b7280);">Carregando insights…</div>`;
+  meta.textContent = 'Sincronizando com o God Mode…';
+
+  try {
+    const data = await adminApiPost('getproductinsights', {});
+
+    meta.textContent =
+      `${data.totais.clientes} cliente(s) · ` +
+      `${data.totais.funcionariosAtivos}/${data.totais.seatsContratados} seats · ` +
+      `${data.totais.incidentesAbertos} incidente(s) aberto(s)`;
+
+    body.innerHTML = renderProductInsightsHtml(data);
+
+  } catch (err) {
+    body.innerHTML = `
+      <div style="
+        background:#fee2e2;
+        color:#991b1b;
+        border:1px solid #fecaca;
+        padding:14px;
+        border-radius:10px;
+      ">
+        Falha ao carregar Product Insights: ${escapeHtml(err.message || String(err))}
+      </div>
+    `;
+  }
+}
+
+function renderProductInsightsHtml(data) {
+  const clientesHtml = (data.clientes || [])
+    .sort(function (a, b) {
+      return a.health.score - b.health.score;
+    })
+    .map(renderClientInsightCard)
+    .join('');
+
+  const incidentesHtml = renderIncidentsPanel(data.incidentes || []);
+
+  return `
+    <section style="
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:12px;
+    ">
+      ${renderInsightKpi('Clientes', data.totais.clientes)}
+      ${renderInsightKpi('Seats ativos', data.totais.funcionariosAtivos + '/' + data.totais.seatsContratados)}
+      ${renderInsightKpi('Incidentes', data.totais.incidentesAbertos)}
+      ${renderInsightKpi('Críticos', data.totais.clientesCriticos)}
+    </section>
+
+    <section style="
+      display:grid;
+      grid-template-columns:minmax(0,1.4fr) minmax(320px,.6fr);
+      gap:16px;
+      align-items:start;
+    ">
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        ${clientesHtml || '<div>Nenhum cliente encontrado.</div>'}
+      </div>
+
+      ${incidentesHtml}
+    </section>
+  `;
+}
+
+function renderInsightKpi(label, value) {
+  return `
+    <div style="
+      background:var(--bg-glass,var(--bg-surface,#fff));
+      border:1px solid var(--border-soft,#e5e7eb);
+      border-radius:12px;
+      padding:14px;
+      box-shadow:var(--shadow-sm,0 1px 3px rgba(0,0,0,.08));
+    ">
+      <div style="font-size:12px;color:var(--text-muted,#6b7280);">${escapeHtml(label)}</div>
+      <div style="font-size:24px;font-weight:800;margin-top:4px;">${escapeHtml(value)}</div>
+    </div>
+  `;
+}
+
+function renderClientInsightCard(c) {
+  const healthColor =
+    c.health.status === 'CRITICO'
+      ? '#dc2626'
+      : c.health.status === 'ATENCAO'
+        ? '#f59e0b'
+        : '#10b981';
+
+  const migrationColor =
+    c.migration.status === 'MIGRAR_AGORA'
+      ? '#dc2626'
+      : c.migration.status === 'PLANEJAR_15D'
+        ? '#f59e0b'
+        : c.migration.status === 'MONITORAR'
+          ? '#2563eb'
+          : '#10b981';
+
+  const appsHealth = (c.apps.health || []).map(function (a) {
+    return `
+      <div style="
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:8px;
+        padding:8px 10px;
+        background:var(--bg-subtle,#f3f4f6);
+        border-radius:8px;
+        font-size:12px;
+      ">
+        <span><strong>${escapeHtml(a.app)}</strong> · ${escapeHtml(a.status)}</span>
+        <span>${Number(a.percUso || 0).toFixed(1)}%</span>
+      </div>
+    `;
+  }).join('');
+
+  const usoPorApp = Object.keys(c.apps.usoPorApp || {}).map(function (app) {
+    const uso = c.apps.usoPorApp[app];
+
+    return `
+      <span style="
+        display:inline-flex;
+        align-items:center;
+        gap:6px;
+        padding:4px 8px;
+        background:rgba(37,99,235,.10);
+        color:#2563eb;
+        border-radius:999px;
+        font-size:12px;
+        font-weight:600;
+      ">
+        ${escapeHtml(app)}: ${uso.funcionariosLiberados}
+      </span>
+    `;
+  }).join('');
+
+  return `
+    <article style="
+      background:var(--bg-glass,var(--bg-surface,#fff));
+      border:1px solid var(--border-soft,#e5e7eb);
+      border-left:5px solid ${healthColor};
+      border-radius:14px;
+      padding:16px;
+      box-shadow:var(--shadow-sm,0 1px 3px rgba(0,0,0,.08));
+    ">
+      <header style="
+        display:flex;
+        align-items:flex-start;
+        justify-content:space-between;
+        gap:14px;
+        margin-bottom:14px;
+      ">
+        <div>
+          <h3 style="margin:0;font-size:16px;font-weight:800;">
+            ${escapeHtml(c.nomeFantasia || c.nome || c.idCliente)}
+          </h3>
+          <div style="font-size:12px;color:var(--text-muted,#6b7280);margin-top:2px;">
+            ${escapeHtml(c.idCliente)} · plano ${escapeHtml(c.plano)}
+          </div>
+        </div>
+
+        <div style="text-align:right;">
+          <div style="font-size:28px;font-weight:900;color:${healthColor};line-height:1;">
+            ${c.health.score}
+          </div>
+          <div style="font-size:11px;color:${healthColor};font-weight:700;">
+            ${escapeHtml(c.health.label)}
+          </div>
+        </div>
+      </header>
+
+      <div style="
+        display:grid;
+        grid-template-columns:repeat(4,minmax(0,1fr));
+        gap:10px;
+        margin-bottom:12px;
+      ">
+        ${renderMiniMetric('Seats', c.seats.usados + '/' + c.seats.limite)}
+        ${renderMiniMetric('Uso seats', c.seats.percentual + '%')}
+        ${renderMiniMetric('Erros abertos', c.logs.errosAbertos)}
+        ${renderMiniMetric('Auth falhas 24h', c.auth.falhas24h)}
+      </div>
+
+      <div style="
+        border:1px solid var(--border-soft,#e5e7eb);
+        border-radius:10px;
+        padding:10px;
+        margin-bottom:12px;
+      ">
+        <div style="
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap:8px;
+          margin-bottom:8px;
+        ">
+          <strong style="font-size:13px;">Migration Readiness</strong>
+          <span style="
+            color:${migrationColor};
+            font-size:12px;
+            font-weight:800;
+          ">
+            ${escapeHtml(c.migration.label)}
+          </span>
+        </div>
+
+        <div style="font-size:12px;color:var(--text-muted,#6b7280);">
+          App crítico: <strong>${escapeHtml(c.migration.appCritico || '—')}</strong> ·
+          Uso máx: <strong>${c.migration.percUsoMax}%</strong> ·
+          Estimativa: <strong>${c.migration.diasRestantes === null ? '—' : c.migration.diasRestantes + ' dia(s)'}</strong>
+        </div>
+      </div>
+
+      <div style="
+        display:grid;
+        grid-template-columns:1fr 1fr;
+        gap:12px;
+      ">
+        <div>
+          <strong style="font-size:13px;">Saúde dos apps</strong>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
+            ${appsHealth || '<span style="font-size:12px;color:var(--text-muted,#6b7280);">Sem apps monitorados.</span>'}
+          </div>
+        </div>
+
+        <div>
+          <strong style="font-size:13px;">Uso por app</strong>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+            ${usoPorApp || '<span style="font-size:12px;color:var(--text-muted,#6b7280);">Sem uso por app.</span>'}
+          </div>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderMiniMetric(label, value) {
+  return `
+    <div style="
+      background:var(--bg-subtle,#f3f4f6);
+      border-radius:8px;
+      padding:8px 10px;
+    ">
+      <div style="font-size:11px;color:var(--text-muted,#6b7280);">${escapeHtml(label)}</div>
+      <div style="font-size:16px;font-weight:800;margin-top:2px;">${escapeHtml(value)}</div>
+    </div>
+  `;
+}
+
+function renderIncidentsPanel(incidentes) {
+  const items = incidentes.slice(0, 12).map(function (inc) {
+    return `
+      <div style="
+        padding:10px;
+        border:1px solid var(--border-soft,#e5e7eb);
+        border-radius:10px;
+        background:var(--bg-surface,#fff);
+      ">
+        <div style="
+          display:flex;
+          justify-content:space-between;
+          gap:8px;
+          align-items:flex-start;
+        ">
+          <strong style="font-size:12px;">${escapeHtml(inc.aplicativo || 'app')}</strong>
+          <span style="
+            background:#fee2e2;
+            color:#991b1b;
+            border-radius:999px;
+            padding:2px 8px;
+            font-size:11px;
+            font-weight:800;
+          ">
+            ${inc.ocorrencias}x
+          </span>
+        </div>
+
+        <div style="
+          font-size:12px;
+          color:var(--text-muted,#6b7280);
+          margin-top:4px;
+          word-break:break-word;
+        ">
+          ${escapeHtml(inc.titulo || inc.mensagemExemplo || '')}
+        </div>
+
+        <div style="
+          margin-top:6px;
+          font-size:11px;
+          color:var(--text-muted,#6b7280);
+        ">
+          Cliente: <strong>${escapeHtml(inc.idCliente)}</strong> ·
+          Última: ${escapeHtml(relativeTime(inc.ultimaOcorrencia))}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <aside style="
+      background:var(--bg-glass,var(--bg-surface,#fff));
+      border:1px solid var(--border-soft,#e5e7eb);
+      border-radius:14px;
+      padding:14px;
+      box-shadow:var(--shadow-sm,0 1px 3px rgba(0,0,0,.08));
+      position:sticky;
+      top:16px;
+    ">
+      <h3 style="margin:0 0 10px;font-size:15px;font-weight:800;">
+        Incidentes agrupados
+      </h3>
+
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        ${items || '<div style="font-size:12px;color:var(--text-muted,#6b7280);">Nenhum incidente aberto.</div>'}
+      </div>
+    </aside>
+  `;
+}
