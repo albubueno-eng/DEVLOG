@@ -2954,3 +2954,10 @@ body:has(.modal:not([hidden])) .fab-novo-cliente { display: none; }
   overflow-y: auto; /* Cria a barra de rolagem interna */
   -webkit-overflow-scrolling: touch; /* Deixa o scroll suave no celular */
 }
+
+/* ============================================================================
+   HOTFIX — evita tela branca se o JS quebrar antes de adicionar body.pronto
+   ============================================================================ */
+body {
+  opacity: 1 !important;
+}
