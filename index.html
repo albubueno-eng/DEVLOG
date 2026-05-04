@@ -17,6 +17,28 @@
 
   <!-- Estilos -->
   <link rel="stylesheet" href="./style.css" />
+  <script>
+  window.addEventListener('error', function (event) {
+    try {
+      document.body && document.body.classList.add('pronto');
+      console.error('[GodMode Boot Error]', event.error || event.message);
+    } catch (_) {}
+  });
+
+  window.addEventListener('unhandledrejection', function (event) {
+    try {
+      document.body && document.body.classList.add('pronto');
+      console.error('[GodMode Promise Error]', event.reason);
+    } catch (_) {}
+  });
+
+  setTimeout(function () {
+    try {
+      document.body && document.body.classList.add('pronto');
+    } catch (_) {}
+  }, 1500);
+</script>
+
 
   <!-- Guard pré-paint: redireciona para login se não houver token -->
   <script>
